@@ -159,7 +159,7 @@ cal.site <- function(cmod, dat){
       out <- lapply(site_id, function(s) cal(cmod, subset(dat, site_id==s)))
     names(out) <- site_id
   } else{
-    if(class(cmod)!="camcal") stop("cmod must be a single camcal object if dat does not contain data for multiple sites")
+    if(class(cmod)!="camcal") stop("cmod must be a single camcal object if dat does not contain a camid column")
     out <- cal(cmod, dat)
   }
   out
