@@ -1,5 +1,6 @@
 setClass("camcal", representation("list"))
 setClass("sitecal", representation("list"))
+require(data.table)
 
 #Converts matrix to dataframe, converting columns to numeric when possible
 matrix.data.frame <- function(mat){
@@ -11,6 +12,36 @@ matrix.data.frame <- function(mat){
   data.frame(lapply(df,f))
 }
 
+#Merges all csv files within given directory and renumbers sequence_id field sequentially
+# path: text string defining directory containing files to merge
+# sitecol: text string giving name of column containing site identifier; if not "site_id" it is the column name is changed
+merge.csv <- function(path, sitecol="site_id"){
+  renumber <- function(x){
+    res <- diff(x)
+    res[res!=0] <- 1
+    c(0, cumsum(res))
+  }
+
+  files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
+  df.list <- lapply(files, read.csv)
+
+  colnames <- lapply(df.list, names)
+  if(length(unique(unlist(lapply(colnames, length)))) > 1)
+    stop("Not all files have the same number of columns")
+  colnames <- matrix(unlist(colnames), ncol=length(colnames))
+  if(any(apply(colnames, 1, function(x) length(unique(x))) != 1))
+    stop("Not all files have the same column headings")
+  
+  df <- rbindlist(df.list)
+  df$sequence_id_original <- df$sequence_id
+  df$sequence_id <- renumber(df$sequence_id)
+  if(sitecol!="site_id") names(df)[names(df)==sitecol] <- "site_id"
+  df$pole_id <- paste(df$site_id, df$frame_number, sep="_")
+  mpth <- paste0(pth,"/merged")
+  dir.create(mpth)
+  write.csv(df, paste0(mpth,"/merged.csv"), row.names=FALSE)
+}
+
 #Reads pole digitisation data for either camera or site calibration
 # file: character value giving name of tracker output csv file to read (including path if not in working directory)
 # fields: column headings for the sequence_annotation field, given as single text string with values separated by sep
@@ -18,23 +49,39 @@ matrix.data.frame <- function(mat){
 #
 #Use the following column names within fields when the relevant information is present:
 # cam_id: camera identifier
+# site_id: site identifier
 # pole_id: pole identifier; if not provided, frame_number is taken to be the pole identifier
 # distance: distance from camera; required for camera calibration
 # length: length of pole digitised; required for camera calibration
 # height: height of digitised point off the ground; required for site calibration
+#Records are discarded if:
+# they have non-numeric distance, length or height values
+file="merged.csv"
+fields="height"
 read.poledat <- function(file, fields, sep=";"){
   dat <- read.csv(file, stringsAsFactors=FALSE)
   col.names <- unlist(strsplit(fields, sep))
-  if(is.numeric(dat$sequence_annotation)) notes <- dat$sequence_annotation else
+  if(gregexpr(sep,fields)[[1]][1]==-1) notes <- dat$sequence_annotation else
     notes <- strsplit(dat$sequence_annotation, sep)
   
   if(any(unlist(lapply(notes, length))!=length(col.names)))
-    stop(paste("fields gives", length(col.names), "headings but Some annotations have <>3"))
+    stop(paste("fields gives", length(col.names), "headings but some annotations do not have this many entries"))
 
   notes <- matrix(unlist(notes), nrow=nrow(dat), byrow=T, dimnames=list(NULL, col.names))
-  dat2 <- cbind(matrix.data.frame(notes), dat[,c("frame_number", "sequence_id", "x", "y")])
-  if(!"pole_id" %in% col.names) 
-    names(dat2)[names(dat2)=="frame_number"] <- "pole_id"
+  dat2 <- cbind(matrix.data.frame(notes), subset(dat, select=-c(sequence_annotation)))
+  
+  if("height" %in% names(dat2)){
+    dat2$height <- suppressWarnings(as.numeric(as.character(dat2$height)))
+    dat2 <- subset(dat2, !is.na(height))
+  }
+  if("distance" %in% names(dat2)){
+    dat2$height <- suppressWarnings(as.numeric(as.character(dat2$distance)))
+    dat2 <- subset(dat2, !is.na(distance))
+  }
+  if("length" %in% names(dat2)){
+    dat2$height <- suppressWarnings(as.numeric(as.character(dat2$length)))
+    dat2 <- subset(dat2, !is.na(length))
+  }
 
   tab <- table(dat2$pole_id)
   duff <- !tab==2
@@ -51,7 +98,7 @@ read.poledat <- function(file, fields, sep=";"){
   }
   
   dat2 <- dat2[order(dat2$pole_id, dat2$y), ]
-  i <- 2*(1:(nrow(dat)/2))
+  i <- 2*(1:(nrow(dat2)/2))
   xy <- cbind(dat2[i, c("x","y")], dat2[i-1, c("x","y")])
   names(xy) <- c("xb","yb","xt","yt")
   if("height" %in% col.names)
@@ -60,7 +107,7 @@ read.poledat <- function(file, fields, sep=";"){
 }
 
 #poledat: data frame of pole digitisation data with columns:
-# pole_id: pole ID codes (Not sure this is actually needed)
+# pole_id: pole ID codes
 # distance: pole distances from camera
 # length: pole lengths
 # xt,yt,xb,yb: x,y pixel positions of pole tops (t) and bases (b) in image
@@ -117,7 +164,8 @@ plot.camcal <- function(mod){
   x <- abs(dat$relx)
   i <- round(1 + (x-min(x))*10/diff(range(x)))
   with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=mod$dim$cam_id,
-                 ylab="pole:pixel ratio", xlab="distance", sub="Shading from image centre (dark) to edge"))
+                 ylab="m/pixel", xlab="distance", 
+                 sub="Shading from image centre (dark) to edge", cex.sub=0.7))
   FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
   dr <- range(dat$distance)
   lines(dr, dr/(FS[1]*mod$dim$y), col=cols[1])
@@ -127,7 +175,8 @@ plot.camcal <- function(mod){
   d <- dat$distance
   i <- round(1 + (d-min(d))*10/diff(range(d)))
   plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=mod$dim$cam_id,
-       xlab="x pixel", ylab="y pixel", sub="Shading from near camera (dark) to far")
+       xlab="x pixel", ylab="y pixel", 
+       sub="Shading from near camera (dark) to far", cex.sub=0.7)
   for(p in 1:nrow(dat))
     lines(dat[p,c("xb","xt")], -dat[p,c("yb","yt")], type="l", lwd=2, col=cols[i[p]])
   lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
@@ -181,7 +230,7 @@ plot.sitecal <- function(mod){
   with(dat, plot(rely, r, col=cols, pch=16, xlim=c(0,1.5), ylim=c(0, 1.5*max(r)),
                  xlab="Relative y pixel position", ylab="Distance from camera",
                  main=unique(dat$site_id), 
-                 sub="Shading from image left (dark) to right edge"))
+                 sub="Shading from image left (dark) to right edge", cex.sub=0.7))
   sq <- seq(0, 1.5, len=100)
   lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
   lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
@@ -191,7 +240,7 @@ plot.sitecal <- function(mod){
   plot(c(min(c(dat$xg, 0)), max(c(dat$xg, dim$x))),
        -c(min(c(dat$yg, 0)), max(c(dat$yg, dim$y))), 
        asp=1, xlab="x pixel", ylab="y pixel", type="n", 
-       main=unique(dat$site_id), sub="Shading from near camera (dark) to far")
+       main=unique(dat$site_id), sub="Shading from near camera (dark) to far", cex.sub=0.7)
   lines(c(0,rep(c(dim$x,0),each=2)), c(rep(c(0,-dim$y),each=2),0), lty=2)
   cols <- with(dat, colrange[1+round(10*((r-min(r))/diff(range(r))))])
   for(i in 1:nrow(mod$site.model$data)){
@@ -200,3 +249,71 @@ plot.sitecal <- function(mod){
   }
 }
 
+#INPUT
+#mods: list of named site models
+#pix: pixel data at which to predict positions (usual columns except x,y rather than xb,yb...)
+#OUTPUT
+#dataframe of radial and angular distances from camera for each row of pix
+predict.pos <- function(mods, pix){
+  m <- match(pix$siteid, names(mods))
+  if(any(is.na(m))) stop("Not all records have a matching site calibration model")
+  res <- sapply(1:nrow(pix), function(i){
+    c(with(pix[i,], predict(mods[[m[i]]], data.frame(xb=x, yb=y)) ),
+      with(mods[[m[i]]]$camera, (pix$x[i]/dim$x-0.5) * gamma ))
+  })
+  res <- data.frame(t(res))
+  names(res) <- c("radius", "angle")
+  cbind(pix, res)
+}
+
+############################################################
+#Data summary Functions
+############################################################
+
+#Dataframe of image-to-image changes for each row in dat:
+#INPUT
+#Dataframe dat produced by predict.pos with columns:
+#   sequence
+#   x,y
+#   radius, angle
+#OUTPUT
+#Dataframe of:
+#   imgcount: image number within sequence
+#   pixdiff: pixel displacement within image
+#   displacement: estimated linear distance moved
+#   d.angle: change in angle from camera
+seq.data <- function(dat){
+  coseqn <- function(r1,r2,theta) sqrt(r1^2+r2^2-2*r1*r2*cos(abs(theta)))
+  imgcount <-  sequence(table(dat$sequence_id))
+  pixdiff <- c(NA, sqrt(diff(dat$x)^2 + diff(dat$y)^2))
+  pixdiff[imgcount==1] <- NA
+  d.angle <- c(NA, diff(dat$angle))
+  d.angle[imgcount==1] <- NA
+  displacement <- coseqn(dat$radius[-nrow(dat)], dat$radius[-1], d.angle[-1])
+  cbind(dat, imgcount=imgcount, pixdiff=pixdiff, displacement=c(NA,displacement), d.angle=d.angle)
+}
+
+#Summarise sequences
+#INPUT
+#Dataframe dat produced by predict.pos with columns:
+#...
+#OUTPUT
+#Dataframe of original data plus:
+#pixdiff=pixdiff,
+#   dist: total displacement
+#   secs: time taken in seconds
+#   speed: dist/seconds
+#   n: number of images in sequence
+seq.summary <- function(dat){
+  dat2 <- seq.data(dat)
+  pixdiff <- with(dat2, tapply(pixdiff, sequence_id, sum, na.rm=T) )
+  mvdist <- with(dat2, tapply(displacement, sequence_id, sum, na.rm=T) )
+  mvtime <- with(dat2, unlist(lapply(tapply(datetime, sequence_id, range), diff)) )
+  cbind(dat2[dat2$imgcount==1, !(names(dat2) %in% c("imgcount","pixdiff","displacement","d.angle"))],
+        pixdiff=pixdiff,
+        dist=mvdist,
+        secs=mvtime,
+        speed=mvdist/mvtime,
+        n=as.numeric(table(dat$sequence_id))
+  )
+}
