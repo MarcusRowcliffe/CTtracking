@@ -134,19 +134,19 @@ cal.cam <- function(poledat, dimdat){
     stop("dimdat must contain at least x and y columns")
   
   if("cam_id" %in% names(poledat) & "cam_id" %in% names(dimdat)){
-    if(!all(sort(unique(poledat$cam_id))==sort(unique(dimdat$cam_id))))
-      stop("cam_id not perfectly matched between poledat and dimdat")
-    out <- lapply(dimdat$cam_id, 
-                  function(cam) 
+    if(!all(poledat$cam_id %in% dimdat$cam_id))
+      stop("Not all poledat$cam_id can be found in dimdat$cam_id")
+    cams <- unique(poledat$cam_id)
+    out <- lapply(cams, function(cam) 
                     cal(subset(poledat, cam_id==cam), subset(dimdat, cam_id==cam))
                   )
-    names(out) <- dimdat$cam_id
+    names(out) <- cams
   } else
     
   if(!"cam_id" %in% names(poledat) & !"cam_id" %in% names(dimdat)){
     if(nrow(dimdat)>1) 
       stop("dimdat must have only 1 row if data provided for a single camera")
-    out <- cal(poledat, dimdat)
+    out <- list(cam=cal(poledat, dimdat))
   } else 
     
     stop("cam_id column must be either present in both poledat and dimdat or neither")
