@@ -54,10 +54,7 @@ merge.csv <- function(path, sitecol="site_id"){
 # distance: distance from camera; required for camera calibration
 # length: length of pole digitised; required for camera calibration
 # height: height of digitised point off the ground; required for site calibration
-#Records are discarded if:
-# they have non-numeric distance, length or height values
-file="merged.csv"
-fields="height"
+#Records are discarded if they have non-numeric distance, length or height values
 read.poledat <- function(file, fields, sep=";"){
   dat <- read.csv(file, stringsAsFactors=FALSE)
   col.names <- unlist(strsplit(fields, sep))
@@ -249,21 +246,39 @@ plot.sitecal <- function(mod){
   }
 }
 
+#Predicts position relative to camera given image pixel positions and site calibration models 
 #INPUT
-#mods: list of named site models
-#pix: pixel data at which to predict positions (usual columns except x,y rather than xb,yb...)
+# file: text string giving name of tracker file containing data to process 
+# mod: named list of site calibration models; names must be matched by site_id column in file
+# fields: column headings for the sequence_annotation field, given as single text string with values separated by sep
+#         Must contain at least "species"
+# sep: single character separating the column names in fields
 #OUTPUT
-#dataframe of radial and angular distances from camera for each row of pix
-predict.pos <- function(mods, pix){
-  m <- match(pix$siteid, names(mods))
-  if(any(is.na(m))) stop("Not all records have a matching site calibration model")
-  res <- sapply(1:nrow(pix), function(i){
-    c(with(pix[i,], predict(mods[[m[i]]], data.frame(xb=x, yb=y)) ),
-      with(mods[[m[i]]]$camera, (pix$x[i]/dim$x-0.5) * gamma ))
+#dataframe of original data with radial and angular distances from camera appended
+predict.pos <- function(file, mod, fields, sep=";"){
+  dat <- read.csv(file, stringsAsFactors=FALSE)
+  col.names <- unlist(strsplit(fields, sep))
+  if(gregexpr(sep,fields)[[1]][1]==-1) notes <- dat$sequence_annotation else
+    notes <- strsplit(dat$sequence_annotation, sep)
+  
+  if(any(unlist(lapply(notes, length))!=length(col.names)))
+    stop(paste("fields gives", length(col.names), "headings but some annotations do not have this many entries"))
+  
+  notes <- matrix(unlist(notes), nrow=nrow(dat), byrow=T, dimnames=list(NULL, col.names))
+  dat2 <- cbind(matrix.data.frame(notes), subset(dat, select=-c(sequence_annotation)))
+  dat2 <- subset(dat2, is.na(suppressWarnings(as.numeric(as.character(dat2$species)))))
+  
+  sites <- unique(dat2$site_id)
+  if(!any(sites %in% names(mod))) stop("Not all records have a matching site calibration model")
+  
+  res <- lapply(sites, function(s){
+    dt <- subset(dat2, site_id==s)
+    cm <- mod[[s]]$cam.model
+    sm <- mod[[s]]$site.model$model
+    data.frame(dt, radius=predict.r(sm, dt$x/cm$dim$x-0.5, dt$y/cm$dim$y),
+               angle=cm$APratio * (dt$x - cm$dim$x/2))
   })
-  res <- data.frame(t(res))
-  names(res) <- c("radius", "angle")
-  cbind(pix, res)
+  res <- as.data.frame(rbindlist(res))
 }
 
 ############################################################
