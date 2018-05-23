@@ -318,20 +318,27 @@ seq.data <- function(dat){
 #Dataframe of original data plus:
 #pixdiff=pixdiff,
 #   dist: total displacement
-#   secs: time taken in seconds
+#   time: time taken
 #   speed: dist/seconds
 #   n: number of images in sequence
 seq.summary <- function(dat, interval){
-  n <- as.numeric(table(dat$sequence_id))
-  dat2 <- seq.data(dat)
-  pixdiff <- with(dat2, tapply(pixdiff, sequence_id, sum, na.rm=T) )
-  mvdist <- with(dat2, tapply(displacement, sequence_id, sum, na.rm=T) )
-  mvtime <- (n-1) * interval
-  cbind(dat2[dat2$imgcount==1, !(names(dat2) %in% c("imgcount","pixdiff","displacement","d.angle"))],
-        pixdiff=pixdiff,
-        dist=mvdist,
-        secs=mvtime,
-        speed=mvdist/mvtime,
-        n=n
-  )
+  calc.mov <- function(dat){
+    n <- as.numeric(table(dat$sequence_id))
+    dat2 <- seq.data(dat)
+    pixdiff <- with(dat2, tapply(pixdiff, sequence_id, sum, na.rm=T) )
+    mvdist <- with(dat2, tapply(displacement, sequence_id, sum, na.rm=T) )
+    mvtime <- (n-1) * interval
+    cbind(dat2[dat2$imgcount==1, !(names(dat2) %in% c("imgcount","pixdiff","displacement","d.angle"))],
+          pixdiff=pixdiff,
+          dist=mvdist,
+          time=mvtime,
+          speed=mvdist/mvtime,
+          frames=n
+    )
+  }
+
+#  dat <- posdat
+  n <- table(dat$sequence_id)
+  i <- dat$sequence_id %in% names(n)[n==1]
+  list(trigdat=subset(dat, i), movdat=calc.mov(subset(dat, !i)))
 }
