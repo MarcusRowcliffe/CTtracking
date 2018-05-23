@@ -115,9 +115,12 @@ read.poledat <- function(file, fields, sep=";"){
 #If data are for multiple cameras, cam_id must be present in both input data frames, and
 # camera IDs must be perfectly matched. If data are for a single camera, cam_id can be omitted
 # from both input data frames.
-cal.cam <- function(poledat, dimdat){
+cal.cam <- function(poledat){
   #Internal function fits a single camera calibration model
-  cal <- function(dat, dim){
+  cal <- function(dat){
+    dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
+    if(length(unlist(dim))>2) stop("There is more than one unique value per camera for xdim and/or ydim in poledat")
+    names(dim) <- c("x","y")
     dat$pixlen <- with(dat, sqrt((xb-xt)^2 + (yb-yt)^2))
     dat$relx <- apply(dat[c("xb","xt")], 1, mean)/dim$x-0.5
     FSratio <- with(dat, distance*pixlen/(length*dim$y))
@@ -127,29 +130,19 @@ cal.cam <- function(poledat, dimdat){
     class(res) <- "camcal"
     res
   }
-  
-  if(class(poledat) != "data.frame" | class(dimdat) != "data.frame") 
-    stop("poledat and dimdat must both be dataframes")
-  if(any(!c("x","y") %in% names(dimdat)))
-    stop("dimdat must contain at least x and y columns")
-  
-  if("cam_id" %in% names(poledat) & "cam_id" %in% names(dimdat)){
-    if(!all(poledat$cam_id %in% dimdat$cam_id))
-      stop("Not all poledat$cam_id can be found in dimdat$cam_id")
+
+  if(class(poledat) != "data.frame") 
+    stop("poledat must be a dataframes")
+  required <- c("xb", "yb", "xt", "yt", "xdim", "ydim", "distance", "length")
+  if(!all(required %in% names(poledat))) 
+    stop(paste("poledat must contain all of these columns:", paste(required, collapse=" ")))
+
+  if("cam_id" %in% names(poledat)){
     cams <- unique(poledat$cam_id)
-    out <- lapply(cams, function(cam) 
-                    cal(subset(poledat, cam_id==cam), subset(dimdat, cam_id==cam))
-                  )
+    out <- lapply(cams, function(cam) cal(subset(poledat, cam_id==cam)))
     names(out) <- cams
   } else
-    
-  if(!"cam_id" %in% names(poledat) & !"cam_id" %in% names(dimdat)){
-    if(nrow(dimdat)>1) 
-      stop("dimdat must have only 1 row if data provided for a single camera")
-    out <- list(cam=cal(poledat, dimdat))
-  } else 
-    
-    stop("cam_id column must be either present in both poledat and dimdat or neither")
+    out <- list(cam=cal(poledat))
   out
 }
 
