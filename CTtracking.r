@@ -288,7 +288,7 @@ predict.pos <- function(file, mod, fields, sep=";"){
 #Dataframe of image-to-image changes for each row in dat:
 #INPUT
 #Dataframe dat produced by predict.pos with columns:
-#   sequence
+#   sequence_id
 #   x,y
 #   radius, angle
 #OUTPUT
@@ -311,7 +311,9 @@ seq.data <- function(dat){
 #Summarise sequences
 #INPUT
 #Dataframe dat produced by predict.pos with columns:
-#...
+# ...
+#interval: time between frames within sequences
+
 #OUTPUT
 #Dataframe of original data plus:
 #pixdiff=pixdiff,
@@ -319,16 +321,17 @@ seq.data <- function(dat){
 #   secs: time taken in seconds
 #   speed: dist/seconds
 #   n: number of images in sequence
-seq.summary <- function(dat){
+seq.summary <- function(dat, interval){
+  n <- as.numeric(table(dat$sequence_id))
   dat2 <- seq.data(dat)
   pixdiff <- with(dat2, tapply(pixdiff, sequence_id, sum, na.rm=T) )
   mvdist <- with(dat2, tapply(displacement, sequence_id, sum, na.rm=T) )
-  mvtime <- with(dat2, unlist(lapply(tapply(datetime, sequence_id, range), diff)) )
+  mvtime <- (n-1) * interval
   cbind(dat2[dat2$imgcount==1, !(names(dat2) %in% c("imgcount","pixdiff","displacement","d.angle"))],
         pixdiff=pixdiff,
         dist=mvdist,
         secs=mvtime,
         speed=mvdist/mvtime,
-        n=as.numeric(table(dat$sequence_id))
+        n=n
   )
 }
