@@ -179,7 +179,7 @@ plot.camcal <- function(mod){
   lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
 }
 
-cal.site <- function(cmod, dat){
+cal.site <- function(cmod, dat, lookup=NULL){
   cal <- function(cmod, dat){
     xdiff <- (dat$xt-dat$xb)
     ydiff <- (dat$yt-dat$yb)
@@ -197,16 +197,16 @@ cal.site <- function(cmod, dat){
   }
   
   if("site_id" %in% names(dat)){
-    site_id <- unique(dat$site_id)
-    if(class(cmod)=="list"){
-      if(!all(site_id %in% names(cmod))) stop("Not all cam_id values in dat have a matching name in cmod")
-      out <- lapply(site_id, function(s) cal(cmod[[s]], subset(dat, site_id==s)))
-    } else
-      out <- lapply(site_id, function(s) cal(cmod, subset(dat, site_id==s)))
-    names(out) <- site_id
+    sites <- unique(dat$site_id)
+    if(is.null(lookup) & length(sites)>1) stop("lookup table must be provided if dat records are site-specific")
+    if(!all(sites %in% lookup$site_id)) stop("Not all dat$site_id values have a matching value in lookup$site_id")
+    if(any(!lookup$cam_id[match(sites, lookup$site_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
+    out <- lapply(sites, function(s) 
+      cal(cmod[[lookup$cam_id[match(s, lookup$site_id)]]], subset(dat, site_id==s)))
+    names(out) <- sites
   } else{
-    if(class(cmod)!="camcal") stop("cmod must be a single camcal object if dat does not contain a camid column")
-    out <- cal(cmod, dat)
+    if(length(cmod)>1) warning("Multiple camera models provided but no dat$site_id column: first camera model applied\n Is that OK?")
+    out <- cal(cmod[[1]], dat)
   }
   out
 }
