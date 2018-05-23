@@ -2,6 +2,56 @@ setClass("camcal", representation("list"))
 setClass("sitecal", representation("list"))
 require(data.table)
 
+#Runs command line ExifTool to extract metadata of all image/video/audio files within a folder
+#See for a list of supported formats https://www.sno.phy.queensu.ca/~phil/exiftool
+#Requires standalone executable exiftool.exe to be present on your computer, available at above link
+#Unzip and rename the exiftool(-k).exe file to exiftool.exe
+#
+#INPUT
+# infolder: a character string giving the path of the folder containing files to process
+# exifpath: a character string giving the path of the folder containing exiftool.exe
+#Path and file names in infolder and outfile must be free of spaces
+#Files withinin subfolders of infolder are also processed
+#
+#OUTPUT
+#A dataframe of metadata. A csv file of the data called metadata.csv is also created (or 
+#overwritten without warning) within infolder
+read.exif <- function(infolder, exifpath="C:/Users/Rowcliffe.M/Documents/APPS/ExifTool"){
+  wd <- getwd()
+  setwd(exifpath)
+  setwd(wd)
+  outfile <- paste0(infolder, "/metadata.csv")
+  cmd <- paste("exiftool -r -csv", infolder, ">", outfile)
+  shell(cmd)
+  return(read.csv(outfile))
+}
+
+# Code to extract stills from camera trap videos
+# need to install ffmpeg - as far as I understood it's a command line software
+# I had to google how to instal it and found a good tutorial on youtube
+temporary_function_name <- function(){
+  library(imager)
+  library(stringr)
+  origem_arquivos_video  <- choose.dir(, "choose folder with original files") 
+  destino_arquivos_foto  <- choose.dir(, "choose folder to send jpgs")
+  'from here it executes the code at the selected files'
+  myFiles <- list.files(path = origem_arquivos_video, pattern="*.avi",
+                        ignore.case=TRUE, recursive = FALSE, include.dirs = FALSE,
+                        full.names = TRUE)
+  myFiles <- sub(" ", "%20", myFiles)
+  for(vd in myFiles){
+    vdframes <- load.video(vd, maxSize=1, skip.to=0, frames=NULL,
+                           fps=2, extra.args="", verbose=FALSE)
+    'fps = 2 means that you will get 2 frames per second'
+    total_frames <- depth(vdframes)
+    for(n in 1:total_frames){
+      nome_arquivo <- str_c(destino_arquivos_foto,"\\",
+                            sub(".*/", "", sub(".AVI", "", paste(vd,n))),".jpeg")
+      save.image(frame(vdframes, n), nome_arquivo)
+    }
+  } 
+}
+
 #Converts matrix to dataframe, converting columns to numeric when possible
 matrix.data.frame <- function(mat){
   f <- function(x){
