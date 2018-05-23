@@ -171,20 +171,25 @@ plot.camcal <- function(mod){
     lines(dat[p,c("xb","xt")], -dat[p,c("yb","yt")], type="l", lwd=2, col=cols[i[p]])
   lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
 }
-
+dat <- subset(sdat, site_id=sites[1])
+lookup <- sctable
+cmod <- cmod[[1]]
 cal.site <- function(cmod, dat, lookup=NULL){
   cal <- function(cmod, dat){
+    dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
+    if(length(unlist(dim))>2) stop("There is more than one unique value per site for xdim and/or ydim in dat")
+    names(dim) <- c("x","y")
     xdiff <- (dat$xt-dat$xb)
     ydiff <- (dat$yt-dat$yb)
     dat$pixlen <- sqrt(xdiff^2 + ydiff^2)
     dat$xg <- with(dat, xb - xdiff*hb/(ht-hb))
     dat$yg <- with(dat, yb - ydiff*hb/(ht-hb))
-    dat$rely <- dat$yg/cmod$dim$y
-    dat$relx <- (dat$xb+dat$xt)/(2 * cmod$dim$x) - 0.5
+    dat$rely <- dat$yg/dim$y
+    dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
     FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
-    dat$r <- FSratio * (dat$ht-dat$hb) * cmod$dim$y/dat$pixlen
+    dat$r <- FSratio * (dat$ht-dat$hb) * dim$y/dat$pixlen
     mod <- nls(r~b1/(rely-(b2+b3*relx)), start=list(b1=2, b2=0, b3=0), data=dat)
-    res <- list(cam.model=cmod, site.model=list(model=mod, data=dat))
+    res <- list(cam.model=cmod, site.model=list(model=mod, data=dat, dim=dim))
     class(res) <- "sitecal"
     res
   }
