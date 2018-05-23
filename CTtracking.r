@@ -255,6 +255,11 @@ plot.sitecal <- function(mod){
 #dataframe of original data with radial and angular distances from camera appended
 predict.pos <- function(file, mod, fields, sep=";"){
   dat <- read.csv(file, stringsAsFactors=FALSE)
+  
+  required <- c("x","y","xdim","ydim","site_id","sequence_annotation","sequence_id")
+  if(!all(required %in% names(dat))) 
+    stop(paste("dat must contain all of these columns:", paste(required, collapse=" ")))
+
   col.names <- unlist(strsplit(fields, sep))
   if(gregexpr(sep,fields)[[1]][1]==-1) notes <- dat$sequence_annotation else
     notes <- strsplit(dat$sequence_annotation, sep)
@@ -268,13 +273,18 @@ predict.pos <- function(file, mod, fields, sep=";"){
   
   sites <- unique(dat2$site_id)
   if(!any(sites %in% names(mod))) stop("Not all records have a matching site calibration model")
-  
+
+  xdimvals <- with(dat2, tapply(xdim, site_id, unique))
+  ydimvals <- with(dat2, tapply(ydim, site_id, unique))
+  if(length(unlist(xdimvals))>length(sites) | length(unlist(ydimvals))>length(sites)) 
+    warning(paste("There is more than one unique value per site for xdim and/or ydim in", file))
+
   res <- lapply(sites, function(s){
     dt <- subset(dat2, site_id==s)
     cm <- mod[[s]]$cam.model
     sm <- mod[[s]]$site.model$model
-    data.frame(dt, radius=predict.r(sm, dt$x/cm$dim$x-0.5, dt$y/cm$dim$y),
-               angle=cm$APratio * (dt$x - cm$dim$x/2))
+    data.frame(dt, radius=predict.r(sm, dt$x/dt$xdim-0.5, dt$y/dt$ydim),
+               angle=cm$APratio * (dt$x - dt$xdim/2))
   })
   res <- as.data.frame(rbindlist(res))
 }
