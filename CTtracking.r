@@ -13,8 +13,11 @@ matrix.data.frame <- function(mat){
 }
 
 #Merges all csv files within given directory and renumbers sequence_id field sequentially
+#INPUT
 # path: text string defining directory containing files to merge
-# sitecol: text string giving name of column containing site identifier; if not "site_id" it is the column name is changed
+# sitecol: text string giving name of column containing site identifier; if not "site_id" the column name is changed to this
+#OUTPUT
+#None, but creates a new file "./merged/merged.csv" within path 
 merge.csv <- function(path, sitecol="site_id"){
   renumber <- function(x){
     res <- diff(x)
@@ -43,8 +46,9 @@ merge.csv <- function(path, sitecol="site_id"){
 }
 
 #Reads pole digitisation data for either camera or site calibration
-# file: character value giving name of tracker output csv file to read (including path if not in working directory)
-# fields: column headings for the sequence_annotation field, given as single text string with values separated by sep
+#INPUT
+# file: character string giving name of tracker output csv file to read (including path if not in working directory)
+# fields: single character string giving column headings for the sequence_annotation field, with names separated by sep
 # sep: single character separating the column names in fields
 #
 #Use the following column names within fields when the relevant information is present:
@@ -54,6 +58,10 @@ merge.csv <- function(path, sitecol="site_id"){
 # distance: distance from camera; required for camera calibration
 # length: length of pole digitised; required for camera calibration
 # height: height of digitised point off the ground; required for site calibration
+#OUTPUT
+#A dataframe with the two ditisation points per pole arranged in single rows.
+#Returns the input data minus x, y and sequence_annotation, plus columns:
+# xb, yb, xt, yt: x and y co-ordinates of pole b(ases) and t(ops)
 #Records are discarded if they have non-numeric distance, length or height values
 read.poledat <- function(file, fields, sep=";"){
   dat <- read.csv(file, stringsAsFactors=FALSE)
@@ -102,19 +110,22 @@ read.poledat <- function(file, fields, sep=";"){
     xy <- cbind(xy, hb=dat2$height[i], ht=dat2$height[i-1])
   cbind(dat2[i, !(names(dat2) %in% c("height","x","y"))], xy)
 }
+required <- c("xb", "yb", "xt", "yt", "xdim", "ydim", "distance", "length")
 
-#poledat: data frame of pole digitisation data with columns:
-# pole_id: pole ID codes
+#Creates a camera calibration model
+#INPUT
+#poledat: data frame of pole digitisation data with (at least) columns:
 # distance: pole distances from camera
 # length: pole lengths
 # xt,yt,xb,yb: x,y pixel positions of pole tops (t) and bases (b) in image
+# xdim, ydim: x and y dimensions of each image
 # cam_id: camera ID code for each record (optional - see below)
-#dimdat: data frame of image dimensions for each camera with columns:
-# x,y: x and y pixel dimensions
-# cam_id: camera ID code for each record (optional - see below)
-#If data are for multiple cameras, cam_id must be present in both input data frames, and
-# camera IDs must be perfectly matched. If data are for a single camera, cam_id can be omitted
-# from both input data frames.
+#
+#OUTPUT
+#An object of class camcal (camera calibration), 
+#describing relationship between pixel size and distance.
+#If cam_id is provided, one model is fitted for each unique camera ID.
+#If data are for a single camera, cam_id can be omitted
 cal.cam <- function(poledat){
   #Internal function fits a single camera calibration model
   cal <- function(dat){
@@ -146,6 +157,7 @@ cal.cam <- function(poledat){
   out
 }
 
+#Show diagnostic plots for camera calibration model
 plot.camcal <- function(mod){
   dat <- mod$data
   cols <- grey.colors(11, start=0, end=0.8)
@@ -171,9 +183,8 @@ plot.camcal <- function(mod){
     lines(dat[p,c("xb","xt")], -dat[p,c("yb","yt")], type="l", lwd=2, col=cols[i[p]])
   lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
 }
-dat <- subset(sdat, site_id=sites[1])
-lookup <- sctable
-cmod <- cmod[[1]]
+
+
 cal.site <- function(cmod, dat, lookup=NULL){
   cal <- function(cmod, dat){
     dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
@@ -209,12 +220,22 @@ cal.site <- function(cmod, dat, lookup=NULL){
   out
 }
 
+#Predict radial distance from camera given pixel positions
+#INPUT
+# mod: a sitecal objext (site calibration model, produced using cal.site(...))
+# relx: x pixel position relative to the centre line
+# rely: y pixel position relative to the top edge
+#
+#OUTPUT
+#A vector numeric radii.
+#Note, units depend on the units of pole height above ground used to calibrate the site model
 predict.r <- function(mod, relx, rely){
   res <- predict(mod, newdata=data.frame(relx=relx, rely=rely))
   res[res<0] <- Inf
   res
 }
 
+#Show diagnostic plots for site calibration model
 plot.sitecal <- function(mod){
   dim <- mod$cam.model$dim
   dat <- mod$site.model$data
@@ -323,12 +344,16 @@ seq.data <- function(dat){
 #interval: time between frames within sequences
 
 #OUTPUT
-#Dataframe of original data plus:
-#pixdiff=pixdiff,
-#   dist: total displacement
-#   time: time taken
-#   speed: dist/seconds
-#   n: number of images in sequence
+#A list of dataframes:
+# $trigdat, trigger data, containing original data for single frame sequences plus:
+#   radius, angle: radius and angle of trigger position
+# $movdat, movement data, containing original data for multi-frame sequences plus:
+#   radius, angle: radius and angle of position in first frame of each image
+#   pixdiff: total pixel distance traveled across image
+#   dist: total distance travelled over ground (units depend on site calibration units)
+#   time: time taken ([frames-1]*interval)
+#   speed: travel speed (dist/time)
+#   frames: number of frames in sequence
 seq.summary <- function(dat, interval){
   calc.mov <- function(dat){
     n <- as.numeric(table(dat$sequence_id))
