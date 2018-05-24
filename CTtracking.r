@@ -402,16 +402,16 @@ seq.data <- function(dat){
 #   radius, angle: radius and angle of position in first frame of each image
 #   pixdiff: total pixel distance traveled across image
 #   dist: total distance travelled over ground (units depend on site calibration units)
-#   time: time taken ([frames-1]*interval)
+#   time: time taken (diff[range{frame.number}]*interval)
 #   speed: travel speed (dist/time)
-#   frames: number of frames in sequence
+#   frames: number of frames digitised
 seq.summary <- function(dat, interval){
   calc.mov <- function(dat){
     n <- as.numeric(table(dat$sequence_id))
     dat2 <- seq.data(dat)
     pixdiff <- with(dat2, tapply(pixdiff, sequence_id, sum, na.rm=T) )
     mvdist <- with(dat2, tapply(displacement, sequence_id, sum, na.rm=T) )
-    mvtime <- (n-1) * interval
+    mvtime <- unlist(lapply(tapply(dat$frame_number, dat$sequence_id, range), diff)) * interval
     cbind(dat2[dat2$imgcount==1, !(names(dat2) %in% c("imgcount","pixdiff","displacement","d.angle"))],
           pixdiff=pixdiff,
           dist=mvdist,
@@ -420,8 +420,6 @@ seq.summary <- function(dat, interval){
           frames=n
     )
   }
-
-#  dat <- posdat
   n <- table(dat$sequence_id)
   i <- dat$sequence_id %in% names(n)[n==1]
   list(trigdat=subset(dat, i), movdat=calc.mov(subset(dat, !i)))
