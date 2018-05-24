@@ -2,6 +2,33 @@ setClass("camcal", representation("list"))
 setClass("sitecal", representation("list"))
 require(data.table)
 
+# Code to extract stills from camera trap videos
+
+# need to install ffmpeg - as far as I understood it's a command line software
+# I had to google how to instal it and found a good tutorial on youtube
+
+library(imager)
+library(stringr)
+extract.frames <- function(){
+  origem_arquivos_video  <- choose.dir(, "choose folder with original files") 
+  destino_arquivos_foto  <- choose.dir(, "choose folder to send jpgs")
+  'from here it executes the code at the selected files'
+  myFiles <- list.files(path = origem_arquivos_video, pattern="*.avi",
+                        ignore.case=TRUE, recursive = FALSE, include.dirs = FALSE,
+                        full.names = TRUE)
+  myFiles <- sub(" ", "%20", myFiles)
+  for(vd in myFiles){
+    vdframes <- load.video(vd, maxSize=1, skip.to=0, frames=NULL,
+                           fps=2, extra.args="", verbose=FALSE)
+    'fps = 2 means that you will get 2 frames per second'
+    total_frames <- depth(vdframes)
+    for(n in 1:total_frames){
+      nome_arquivo <- str_c(destino_arquivos_foto,"\\",
+                            sub(".*/", "", sub(".AVI", "", paste(vd,n))),".jpeg")
+      save.image(frame(vdframes, n), nome_arquivo)
+    }
+  }  
+}
 #Runs command line ExifTool to extract metadata of all image/video/audio files within a folder
 #See for a list of supported formats https://www.sno.phy.queensu.ca/~phil/exiftool
 #Requires standalone executable exiftool.exe to be present on your computer, available at above link
