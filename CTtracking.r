@@ -26,32 +26,6 @@ read.exif <- function(infolder, exifpath="C:/Users/Rowcliffe.M/Documents/APPS/Ex
   return(read.csv(outfile))
 }
 
-# Code to extract stills from camera trap videos
-# need to install ffmpeg - as far as I understood it's a command line software
-# I had to google how to instal it and found a good tutorial on youtube
-temporary_function_name <- function(){
-  library(imager)
-  library(stringr)
-  origem_arquivos_video  <- choose.dir(, "choose folder with original files") 
-  destino_arquivos_foto  <- choose.dir(, "choose folder to send jpgs")
-  'from here it executes the code at the selected files'
-  myFiles <- list.files(path = origem_arquivos_video, pattern="*.avi",
-                        ignore.case=TRUE, recursive = FALSE, include.dirs = FALSE,
-                        full.names = TRUE)
-  myFiles <- sub(" ", "%20", myFiles)
-  for(vd in myFiles){
-    vdframes <- load.video(vd, maxSize=1, skip.to=0, frames=NULL,
-                           fps=2, extra.args="", verbose=FALSE)
-    'fps = 2 means that you will get 2 frames per second'
-    total_frames <- depth(vdframes)
-    for(n in 1:total_frames){
-      nome_arquivo <- str_c(destino_arquivos_foto,"\\",
-                            sub(".*/", "", sub(".AVI", "", paste(vd,n))),".jpeg")
-      save.image(frame(vdframes, n), nome_arquivo)
-    }
-  } 
-}
-
 #Converts matrix to dataframe, converting columns to numeric when possible
 matrix.data.frame <- function(mat){
   f <- function(x){
