@@ -7,8 +7,8 @@ require(data.table)
 # need to install ffmpeg - as far as I understood it's a command line software
 # I had to google how to instal it and found a good tutorial on youtube
 
-library(imager)
-library(stringr)
+#library(imager)
+#library(stringr)
 extract.frames <- function(){
   origem_arquivos_video  <- choose.dir(, "choose folder with original files") 
   destino_arquivos_foto  <- choose.dir(, "choose folder to send jpgs")
@@ -105,7 +105,7 @@ merge.csv <- function(path, sitecol="site_id"){
 #Use the following column names within fields when the relevant information is present:
 # cam_id: camera identifier
 # site_id: site identifier
-# pole_id: pole identifier; if not provided, frame_number is taken to be the pole identifier
+# pole_id: pole identifier; if not provided in annotations, frame_number is taken to be the pole identifier
 # distance: distance from camera; required for camera calibration
 # length: length of pole digitised; required for camera calibration
 # height: height of digitised point off the ground; required for site calibration
@@ -138,7 +138,14 @@ read.poledat <- function(file, fields, sep=";"){
     dat2$height <- suppressWarnings(as.numeric(as.character(dat2$length)))
     dat2 <- subset(dat2, !is.na(length))
   }
-
+  
+  if("site_id" %in% names(dat2))
+    dat2$pole_id <- paste(dat2$site_id, dat2$frame_number, sep="_") else
+  if("cam_id" %in% names(dat2))
+    dat2$pole_id <- paste(dat2$cam_id, dat2$pole_id, sep="_") else
+  if(!"pole_id" %in% names(dat2))
+    dat2$pole_id <- dat2$frame_number
+      
   tab <- table(dat2$pole_id)
   duff <- !tab==2
   if(any(duff)){
@@ -161,7 +168,6 @@ read.poledat <- function(file, fields, sep=";"){
     xy <- cbind(xy, hb=dat2$height[i], ht=dat2$height[i-1])
   cbind(dat2[i, !(names(dat2) %in% c("height","x","y"))], xy)
 }
-required <- c("xb", "yb", "xt", "yt", "xdim", "ydim", "distance", "length")
 
 #Creates a camera calibration model
 #INPUT
