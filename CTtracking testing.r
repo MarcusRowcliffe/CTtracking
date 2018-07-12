@@ -1,4 +1,4 @@
-setwd("C:/Users/rowcliffe.m/Documents/GitHub/CTtracking")
+setwd("C:/Users/scott/Desktop/Thesis/Github/CTtracking")
 source("CTtracking.r")
 
 cdat <- read.poledat("./Gee data/camcal.csv", "pole_id;distance;length")
