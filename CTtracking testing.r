@@ -1,7 +1,8 @@
 setwd("C:/Users/scott/Desktop/Thesis/Github/CTtracking")
+library(data.table)
 source("CTtracking.r")
 
-cdat <- read.poledat("./Gee data/camcal.csv", "pole_id;distance;length")
+cdat <- read.poledat("./Gee data/cam_cal.csv", "pole_id;distance;length")
 cmod <- cal.cam(cdat)
 plot(cmod$cam)
 
