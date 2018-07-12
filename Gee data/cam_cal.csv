@@ -1,4 +1,4 @@
-"x","y","frame_number","sequence_id","sequence_annotation","number_of_points","Camera_ID","xres","yres"
+"x","y","frame_number","sequence_id","sequence_annotation","number_of_points","cam_id","xdim","ydim"
 436.2023331,2027.032167,0,0,"31;3;0.9",1,"B10",3264,2448
 447.9058327,739.6472076,0,1,"31;3;0.9",1,"B10",3264,2448
 884.8364855,1995.822834,0,2,"32;3;0.9",1,"B10",3264,2448
