@@ -149,7 +149,7 @@ read.poledat <- function(file, fields, sep=";"){
   tab <- table(dat2$pole_id)
   duff <- !tab==2
   if(any(duff)){
-    dat <- droplevels(dat[!dat$pole_id %in% names(which(duff)), ])
+    dat2 <- droplevels(dat2[!dat2$pole_id %in% names(which(duff)), ])
     warning(paste("Some poles did not have exactly 2 points digitised and were removed:", 
                   paste(names(which(duff)), collapse=" ")))
   }
@@ -166,7 +166,17 @@ read.poledat <- function(file, fields, sep=";"){
   names(xy) <- c("xb","yb","xt","yt")
   if("height" %in% col.names)
     xy <- cbind(xy, hb=dat2$height[i], ht=dat2$height[i-1])
-  cbind(dat2[i, !(names(dat2) %in% c("height","x","y"))], xy)
+  res <- cbind(dat2[i, !(names(dat2) %in% c("height","x","y"))], xy)
+  
+  if("height" %in% col.names){
+    duff <- res$hb>=res$ht
+    if(any(duff)){
+      warning(paste("Some poles had base height >= top height and were removed:", 
+                    paste(res$pole_id[duff], collapse=" ")))
+      res <- droplevels(res[!duff, ])
+    }
+  }
+  res
 }
 
 #Creates a camera calibration model
@@ -222,7 +232,7 @@ plot.camcal <- function(mod){
 #PLOT POLE:PIXEL RATIO V DISTANCE RELATIONSHIP
   x <- abs(dat$relx)
   i <- round(1 + (x-min(x))*10/diff(range(x)))
-  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=mod$dim$cam_id,
+  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=unique(dat$cam_id),
                  ylab="m/pixel", xlab="distance", 
                  sub="Shading from image centre (dark) to edge", cex.sub=0.7))
   FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
@@ -233,7 +243,7 @@ plot.camcal <- function(mod){
 #PLOT POLE IMAGE
   d <- dat$distance
   i <- round(1 + (d-min(d))*10/diff(range(d)))
-  plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=mod$dim$cam_id,
+  plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=unique(dat$cam_id),
        xlab="x pixel", ylab="y pixel", 
        sub="Shading from near camera (dark) to far", cex.sub=0.7)
   for(p in 1:nrow(dat))
@@ -242,7 +252,7 @@ plot.camcal <- function(mod){
 }
 
 
-cal.site <- function(cmod, dat, lookup=NULL){
+cal.site <- function(cmod, dat, lookup){
   cal <- function(cmod, dat){
     dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
     if(length(unlist(dim))>2) stop("There is more than one unique value per site for xdim and/or ydim in dat")
@@ -256,26 +266,28 @@ cal.site <- function(cmod, dat, lookup=NULL){
     dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
     FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
     dat$r <- FSratio * (dat$ht-dat$hb) * dim$y/dat$pixlen
-    mod <- nls(r~b1/(rely-(b2+b3*relx)), start=list(b1=2, b2=0, b3=0), data=dat)
+    mod <- try(nls(r~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
+                   start=list(b1=min(dat$r)/2, b2=min(dat$rely)*0.9, b3=0),
+                   lower=c(b1=0,b2=0,b3=-Inf), 
+                   upper=c(b1=Inf,b2=min(dat$rely),b3=Inf),
+                   trace=F
+                   )
+               )
     res <- list(cam.model=cmod, site.model=list(model=mod, data=dat, dim=dim))
     class(res) <- "sitecal"
     res
   }
   
-  if("site_id" %in% names(dat)){
-    sites <- unique(dat$site_id)
-    if(is.null(lookup) & length(sites)>1) stop("lookup table must be provided if dat records are site-specific")
-    if(!all(sites %in% lookup$site_id)) stop("Not all dat$site_id values have a matching value in lookup$site_id")
-    if(any(!lookup$cam_id[match(sites, lookup$site_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
-    out <- lapply(sites, function(s) 
-      cal(cmod[[lookup$cam_id[match(s, lookup$site_id)]]], subset(dat, site_id==s)))
-    names(out) <- sites
-  } else{
-    if(length(cmod)>1) warning("Multiple camera models provided but no dat$site_id column: first camera model applied\n Is that OK?")
-    out <- cal(cmod[[1]], dat)
-  }
+  sites <- unique(dat$site_id)
+  if(!all(sites %in% lookup$site_id)) stop("Not all dat$site_id values have a matching value in lookup$site_id")
+  if(any(!lookup$cam_id[match(sites, lookup$site_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
+  out <- lapply(sites, function(s) 
+    cal(cmod[[lookup$cam_id[match(s, lookup$site_id)]]], subset(dat, site_id==s)))
+  names(out) <- sites
   out
 }
+
+
 
 #Predict radial distance from camera given pixel positions
 #INPUT
@@ -294,7 +306,7 @@ predict.r <- function(mod, relx, rely){
 
 #Show diagnostic plots for site calibration model
 plot.sitecal <- function(mod){
-  dim <- mod$cam.model$dim
+  dim <- as.list(apply(smod$OCGSV09$site.model$data[,c("xdim","ydim")],2,unique))
   dat <- mod$site.model$data
   colrange <- grey.colors(11, start=0, end=0.8)
   
@@ -304,17 +316,19 @@ plot.sitecal <- function(mod){
                  xlab="Relative y pixel position", ylab="Distance from camera",
                  main=unique(dat$site_id), 
                  sub="Shading from image left (dark) to right edge", cex.sub=0.7))
-  sq <- seq(0, 1.5, len=100)
-  lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
-  lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
-  lines(sq, predict.r(mod$site.model$model, 0.5, sq), col=colrange[11])
+  if(class(mod$site.model$model)=="nls"){
+    sq <- seq(0, 1.5, len=100)
+    lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
+    lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
+    lines(sq, predict.r(mod$site.model$model, 0.5, sq), col=colrange[11])
+  }
 
 #PLOT POLE IMAGE
-  plot(c(min(c(dat$xg, 0)), max(c(dat$xg, dim$x))),
-       -c(min(c(dat$yg, 0)), max(c(dat$yg, dim$y))), 
+  plot(c(min(c(dat$xg, 0)), max(c(dat$xg, dim$xdim))),
+       -c(min(c(dat$yg, 0)), max(c(dat$yg, dim$ydim))), 
        asp=1, xlab="x pixel", ylab="y pixel", type="n", 
        main=unique(dat$site_id), sub="Shading from near camera (dark) to far", cex.sub=0.7)
-  lines(c(0,rep(c(dim$x,0),each=2)), c(rep(c(0,-dim$y),each=2),0), lty=2)
+  lines(c(0,rep(c(dim$xdim,0),each=2)), c(rep(c(0,-dim$ydim),each=2),0), lty=2)
   cols <- with(dat, colrange[1+round(10*((r-min(r))/diff(range(r))))])
   for(i in 1:nrow(mod$site.model$data)){
     with(dat, lines(c(xg[i],xt[i]), -c(yg[i],yt[i]), col=cols[i], lwd=2))
