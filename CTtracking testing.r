@@ -28,7 +28,7 @@ names(dat)[names(dat)=="CTsite"] <- "site_id"
 names(dat)[names(dat)=="Camera_ID"] <- "cam_id"
 names(dat)[names(dat)=="xres"] <- "xdim"
 names(dat)[names(dat)=="yres"] <- "ydim"
-dat2 <- dat[-c(264,265,266,267,268,269), ] 
+dat <- dat[-c(264,265,266,267,268,269), ] 
 write.csv(dat, "./Gee data/new_full_data2.csv", row.names=F)
 
 
@@ -54,12 +54,6 @@ View(sdat)
 #1. One site_id has no cam_id associated - assigning an arbitrary one for now 
 sdat$cam_id[sdat$cam_id==""] <- "B12"
 #
-#2. One site has more than one set of image dimensions - assigning arbitrary dimensions for now
-which(apply(table(sdat$site_id, sdat$xdim), 1, function(x) sum(x!=0)) > 1)
-which(apply(table(sdat$site_id, sdat$ydim), 1, function(x) sum(x!=0)) > 1)
-subset(sdat, site_id=="OCCAJ17")[,c("xdim","ydim")]
-sdat[sdat$site_id=="OCCAJ17", ]$xdim <- 3264
-sdat[sdat$site_id=="OCCAJ17", ]$ydim <- 2488
 
 #Create site-to-camera lookup table
 site.by.cam <- table(sdat$site_id, sdat$cam_id)
@@ -76,7 +70,7 @@ par(mfrow=c(1,2))
 lapply(smod, plot)
 
 #Predict positions (angle and radius) for animal data
-posdat <- predict.pos(file="./Gee data/full_data2.csv", mod=smod, fields="species")
+posdat <- predict.pos(file="./Gee data/new_full_data2.csv", mod=smod, fields="species")
 View(posdat)
 #Might want to check how many radii are infinite, or finite but improbably large
 sum(is.infinite(posdat$radius))
