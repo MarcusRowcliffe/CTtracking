@@ -500,6 +500,7 @@ seq.summary <- function(dat, interval){
           frames=n
     )
   }
+  dat <- dat[order(dat$sequence_id), ]
   n <- table(dat$sequence_id)
   i <- dat$sequence_id %in% names(n)[n==1]
   list(trigdat=subset(dat, i), movdat=calc.mov(subset(dat, !i)))
