@@ -80,6 +80,9 @@ sum(posdat$radius>1500)
 #Let's discuss what to do with these once you've had a closer look
 
 #Extract 1) trigger position data; and 2) movement sequence data
+undebug(seq.summary)
+debug(seq.data)
+View(posdat[order(posdat$sequence_id),])
 dat <- seq.summary(posdat, 0.5)
 View(dat$trigdat)
 View(dat$movdat)
@@ -87,7 +90,6 @@ View(dat$movdat)
 #Check out distributions
 hist(dat$trigdat$radius, breaks=50)
 hist(log10(dat$movdat$speed), breaks=20)
-
 
 #############################################
 #REM ANALYSIS
