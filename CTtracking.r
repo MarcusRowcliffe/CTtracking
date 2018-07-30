@@ -207,6 +207,8 @@ read.poledat <- function(file, fields, sep=";"){
 #OUTPUT
 #A named list of objects of class camcal (camera calibration), 
 #describing relationship between pixel size and distance.
+# model: quadratic model of FSratio against relative x position
+# APratio: ratio of angle to *relative* x pixel position
 #If cam_id is provided, one model is fitted for each unique camera ID.
 #If data are for a single camera, cam_id can be omitted
 cal.cam <- function(poledat){
@@ -218,7 +220,7 @@ cal.cam <- function(poledat){
     dat$pixlen <- with(dat, sqrt((xb-xt)^2 + (yb-yt)^2))
     dat$relx <- apply(dat[c("xb","xt")], 1, mean)/dim$x-0.5
     FSratio <- with(dat, distance*pixlen/(length*dim$y))
-    APratio <- mean(with(dat, (acos(1-length^2/(2*(distance^2+(length/2)^2)))/pixlen)))
+    APratio <- mean(with(dat, (acos(1-length^2/(2*(distance^2+(length/2)^2)))*dim$x/pixlen)))
     mod <- lm(FSratio~I(relx^2), data=dat)
     res <- list(model=mod, APratio=APratio, dim=dim, data=dat)
     class(res) <- "camcal"
@@ -430,7 +432,7 @@ predict.pos <- function(file, mod, fields, sep=";"){
     cm <- mod[[s]]$cam.model
     sm <- mod[[s]]$site.model$model
     data.frame(dt, radius=predict.r(sm, dt$x/dt$xdim-0.5, dt$y/dt$ydim),
-               angle=cm$APratio * (dt$x - dt$xdim/2))
+               angle=cm$APratio * (dt$x/dt$xdim-0.5))
   })
   res <- as.data.frame(rbindlist(res))
 }
