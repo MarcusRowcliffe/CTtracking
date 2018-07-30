@@ -2,7 +2,7 @@ setClass("camcal", representation("list"))
 setClass("sitecal", representation("list"))
 require(data.table)
 
-# Code to extract stills from camera trap videos - UNFINISHED
+# Code to extract stills from camera trap videos
 
 # need to install ffmpeg - as far as I understood it's a command line software
 # I had to google how to instal it and found a good tutorial on youtube
@@ -29,10 +29,6 @@ extract.frames <- function(){
     }
   }  
 }
-
-#######################################################################################################
-#read.exif
-#######################################################################################################
 #Runs command line ExifTool to extract metadata of all image/video/audio files within a folder
 #See for a list of supported formats https://www.sno.phy.queensu.ca/~phil/exiftool
 #Requires standalone executable exiftool.exe to be present on your computer, available at above link
@@ -57,9 +53,6 @@ read.exif <- function(infolder, exifpath="C:/Users/Rowcliffe.M/Documents/APPS/Ex
   return(read.csv(outfile))
 }
 
-#######################################################################################################
-#matrix.data.frame
-#######################################################################################################
 #Converts matrix to dataframe, converting columns to numeric when possible
 matrix.data.frame <- function(mat){
   f <- function(x){
@@ -70,9 +63,6 @@ matrix.data.frame <- function(mat){
   data.frame(lapply(df,f))
 }
 
-#######################################################################################################
-#merge.csv
-#######################################################################################################
 #Merges all csv files within given directory and renumbers sequence_id field sequentially
 #INPUT
 # path: text string defining directory containing files to merge
@@ -106,9 +96,6 @@ merge.csv <- function(path, sitecol="site_id"){
   write.csv(df, paste0(mpth,"/merged.csv"), row.names=FALSE)
 }
 
-#######################################################################################################
-#read.poledat
-#######################################################################################################
 #Reads pole digitisation data for either camera or site calibration
 #INPUT
 # file: character string giving name of tracker output csv file to read (including path if not in working directory)
@@ -163,13 +150,13 @@ read.poledat <- function(file, fields, sep=";"){
   duff <- !tab==2
   if(any(duff)){
     dat2 <- droplevels(dat2[!dat2$pole_id %in% names(which(duff)), ])
-    warning(paste("Some poles did not have exactly 2 points digitised and were removed:\n", 
+    warning(paste("Some poles did not have exactly 2 points digitised and were removed:", 
                   paste(names(which(duff)), collapse=" ")))
   }
   if("distance" %in% col.names){
     duff <- with(dat2, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
     if(any(duff))
-      stop(paste("Some poles did not have matching distance for top and base:\n",
+      stop(paste("Some poles did not have matching distance for top and base:",
                  paste(names(which(duff)), collapse=" ")))
   }
   
@@ -184,7 +171,7 @@ read.poledat <- function(file, fields, sep=";"){
   if("height" %in% col.names){
     duff <- res$hb>=res$ht
     if(any(duff)){
-      warning(paste("Some poles had base height >= top height and were removed:\n", 
+      warning(paste("Some poles had base height >= top height and were removed:", 
                     paste(res$pole_id[duff], collapse=" ")))
       res <- droplevels(res[!duff, ])
     }
@@ -192,12 +179,9 @@ read.poledat <- function(file, fields, sep=";"){
   res
 }
 
-#######################################################################################################
-#cal.cam
-#######################################################################################################
 #Creates a camera calibration model
 #INPUT
-# poledat: data frame of pole digitisation data with (at least) columns:
+#poledat: data frame of pole digitisation data with (at least) columns:
 # distance: pole distances from camera
 # length: pole lengths
 # xt,yt,xb,yb: x,y pixel positions of pole tops (t) and bases (b) in image
@@ -205,7 +189,7 @@ read.poledat <- function(file, fields, sep=";"){
 # cam_id: camera ID code for each record (optional - see below)
 #
 #OUTPUT
-#A named list of objects of class camcal (camera calibration), 
+#An object of class camcal (camera calibration), 
 #describing relationship between pixel size and distance.
 # model: quadratic model of FSratio against relative x position
 # APratio: ratio of angle to *relative* x pixel position
@@ -242,12 +226,7 @@ cal.cam <- function(poledat){
   out
 }
 
-#######################################################################################################
-#plot.camcal
-#######################################################################################################
 #Show diagnostic plots for camera calibration model
-#1. pole length / pixel length ratio against real distance
-#2. Image view with poles
 plot.camcal <- function(mod){
   dat <- mod$data
   cols <- grey.colors(11, start=0, end=0.8)
@@ -274,23 +253,7 @@ plot.camcal <- function(mod){
   lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
 }
 
-#######################################################################################################
-#cal.site
-#######################################################################################################
-#Fits site calibration models
-#INPUT
-# cmod: a named list of camera calibration models created using cam.cal (can be a single model but still needs to be a named list)
-# dat: a dataframe of pole digitisation data created using read.poledat
-# lookup: a dataframe with (at least) columns site_id and cam_id matching camera models to site
-#Values in lookup$cam_id must be matched in names(cmod)
-#
-#OUTPUT
-#A named list of objects of type sitecal, each with components:
-# cam.model: a camera calibriation model created using cal.cam
-# site.model: a list with components:
-#  model: a fitted nls object describing the relationship between real distance and imagepixel position
-#  data: a dataframe containing the data used to fit the model
-#  dim: the pixel dimensions of the site's images
+
 cal.site <- function(cmod, dat, lookup){
   cal <- function(cmod, dat){
     dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
@@ -301,8 +264,6 @@ cal.site <- function(cmod, dat, lookup){
     dat$pixlen <- sqrt(xdiff^2 + ydiff^2)
     dat$xg <- with(dat, xb - xdiff*hb/(ht-hb))
     dat$yg <- with(dat, yb - ydiff*hb/(ht-hb))
-    dat$xm <- with(dat, xt + xdiff*(1-ht)/(ht-hb))
-    dat$ym <- with(dat, yt + ydiff*(1-ht)/(ht-hb))
     dat$rely <- dat$yg/dim$y
     dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
     FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
@@ -328,9 +289,8 @@ cal.site <- function(cmod, dat, lookup){
   out
 }
 
-#######################################################################################################
-#predict.r
-#######################################################################################################
+
+
 #Predict radial distance from camera given pixel positions
 #INPUT
 # mod: a sitecal objext (site calibration model, produced using cal.site(...))
@@ -346,46 +306,38 @@ predict.r <- function(mod, relx, rely){
   res
 }
 
-#######################################################################################################
-#plot.sitecal
-#######################################################################################################
-#Show diagnostic plots for site calibration model:
-#1. Real distance against y pixel position
-#2. Image view with poles
+#Show diagnostic plots for site calibration model
 plot.sitecal <- function(mod){
-  dim <- mod$site.model$dim
+  dim <- as.list(apply(smod$OCGSV09$site.model$data[,c("xdim","ydim")],2,unique))
   dat <- mod$site.model$data
   colrange <- grey.colors(11, start=0, end=0.8)
   
 #PLOT DISTANCE V Y-PIXEL RELATIONSHIP
   cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
-  with(dat, plot(rely, r, col=cols, pch=16, xlim=c(0,max(1.5,rely)), ylim=c(0, max(r)),
+  with(dat, plot(rely, r, col=cols, pch=16, xlim=c(0,1.5), ylim=c(0, 1.5*max(r)),
                  xlab="Relative y pixel position", ylab="Distance from camera",
                  main=unique(dat$site_id), 
                  sub="Shading from image left (dark) to right edge", cex.sub=0.7))
   if(class(mod$site.model$model)=="nls"){
-    sq <- seq(0, max(1.5,dat$rely), len=100)
+    sq <- seq(0, 1.5, len=100)
     lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
     lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
     lines(sq, predict.r(mod$site.model$model, 0.5, sq), col=colrange[11])
   }
 
 #PLOT POLE IMAGE
-  with(dat, plot(c(min(0,xg,xm), max(dim$x,xg,xm)), 
-                   -c(max(dat$yg, dim$y), min(ym, 0)),
-                 asp=1, xlab="x pixel", ylab="y pixel", type="n",
-                 main=unique(dat$site_id), sub="Shading from near camera (dark) to far", cex.sub=0.7)
-  )
-  lines(c(0,rep(c(dim$x,0),each=2)), c(rep(c(0,-dim$y),each=2),0), lty=2)
+  plot(c(min(c(dat$xg, 0)), max(c(dat$xg, dim$xdim))),
+       -c(min(c(dat$yg, 0)), max(c(dat$yg, dim$ydim))), 
+       asp=1, xlab="x pixel", ylab="y pixel", type="n", 
+       main=unique(dat$site_id), sub="Shading from near camera (dark) to far", cex.sub=0.7)
+  lines(c(0,rep(c(dim$xdim,0),each=2)), c(rep(c(0,-dim$ydim),each=2),0), lty=2)
   cols <- with(dat, colrange[1+round(10*((r-min(r))/diff(range(r))))])
   for(i in 1:nrow(mod$site.model$data)){
-    with(dat, lines(c(xg[i],xm[i]), -c(yg[i],ym[i]), col=cols[i], lwd=2))
-    with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, col=3, cex=0.7))
+    with(dat, lines(c(xg[i],xt[i]), -c(yg[i],yt[i]), col=cols[i], lwd=2))
+    with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7))
   }
 }
-#######################################################################################################
-#predict.pos
-#######################################################################################################
+
 #Predicts position relative to camera given image pixel positions and site calibration models 
 #INPUT
 # file: text string giving name of tracker file containing data to process 
@@ -411,16 +363,10 @@ predict.pos <- function(file, mod, fields, sep=";"){
   
   notes <- matrix(unlist(notes), nrow=nrow(dat), byrow=T, dimnames=list(NULL, col.names))
   dat2 <- cbind(matrix.data.frame(notes), subset(dat, select=-c(sequence_annotation)))
-  dat2 <- droplevels(subset(dat2, is.na(suppressWarnings(as.numeric(as.character(dat2$species))))))
+  dat2 <- subset(dat2, is.na(suppressWarnings(as.numeric(as.character(dat2$species)))))
   
   sites <- unique(dat2$site_id)
-  matched <- sites %in% names(mod)
-  if(!all(matched)){
-    warning(paste("Records for the following site(s) had no matching site calibration model and were discarded:\n"),
-                  paste(sites[!matched], collapse=" "))
-    dat2 <- subset(dat2, site_id %in% sites[matched])
-    sites <- sites[matched]
-  }
+  if(!any(sites %in% names(mod))) stop("Not all records have a matching site calibration model")
 
   xdimvals <- with(dat2, tapply(xdim, site_id, unique))
   ydimvals <- with(dat2, tapply(ydim, site_id, unique))
@@ -441,9 +387,6 @@ predict.pos <- function(file, mod, fields, sep=";"){
 #Data summary Functions
 ############################################################
 
-#######################################################################################################
-#seq.data
-#######################################################################################################
 #Dataframe of image-to-image changes for each row in dat:
 #INPUT
 #Dataframe dat produced by predict.pos with columns:
@@ -467,9 +410,6 @@ seq.data <- function(dat){
   cbind(dat, imgcount=imgcount, pixdiff=pixdiff, displacement=c(NA,displacement), d.angle=d.angle)
 }
 
-#######################################################################################################
-#seq.summary
-#######################################################################################################
 #Summarise sequences
 #INPUT
 #Dataframe dat produced by predict.pos with columns:

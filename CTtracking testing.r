@@ -1,4 +1,5 @@
-setwd("C:/Users/rowcliffe.m/Documents/GitHub/CTtracking")
+setwd("C:/Users/scott/Desktop/Thesis/Github/CTtracking")
+library(data.table)
 source("CTtracking.r")
 
 #Edit cam_cal file (new version created: cam_cal2)
@@ -19,7 +20,7 @@ write.csv(dat, "./Gee data/cam_cal2.csv", row.names=F)
 
 #Edit full_data file (new version created: full_data2)
 # (need to create unique sequence_id values, convert height units cm to m, and rename some columns)
-dat <- read.csv("./Gee data/full_data.csv", stringsAsFactors=F)
+dat <- read.csv("./Gee data/new_full_data.csv", stringsAsFactors=F)
 dat$sequence_id <- paste(dat$CTsite, dat$sequence_id, sep="_")
 hts <- as.numeric(dat$sequence_annotation)/100
 dat$sequence_annotation[!is.na(hts)] <- hts[!is.na(hts)]
@@ -27,7 +28,8 @@ names(dat)[names(dat)=="CTsite"] <- "site_id"
 names(dat)[names(dat)=="Camera_ID"] <- "cam_id"
 names(dat)[names(dat)=="xres"] <- "xdim"
 names(dat)[names(dat)=="yres"] <- "ydim"
-write.csv(dat, "./Gee data/full_data2.csv", row.names=F)
+dat <- dat[-c(264,265,266,267,268,269), ] 
+write.csv(dat, "./Gee data/new_full_data2.csv", row.names=F)
 
 
 #Extract data for camera calibration model
@@ -37,25 +39,21 @@ View(cdat)
 #Fit camera calibration model(s)
 cmod <- cal.cam(cdat)
 
+
 #Show diagnostic plots
 par(mfrow=c(1,2))
 lapply(cmod, plot)
 
+
 #Extract data for camera calibration model
-sdat <- read.poledat("./Gee data/full_data2.csv", "height")
+sdat <- read.poledat("./Gee data/new_full_data2.csv", "height")
 View(sdat)
 
 #FIXING A COUPLE OF PROBLEMS
 #
 #1. One site_id has no cam_id associated - assigning an arbitrary one for now 
-sdat$cam_id[sdat$cam_id==""] <- "B15"
+sdat$cam_id[sdat$cam_id==""] <- "B12"
 #
-#2. One site has more than one set of image dimensions - assigning arbitrary dimensions for now
-which(apply(table(sdat$site_id, sdat$xdim), 1, function(x) sum(x!=0)) > 1)
-which(apply(table(sdat$site_id, sdat$ydim), 1, function(x) sum(x!=0)) > 1)
-subset(sdat, site_id=="OCCAJ17")[,c("xdim","ydim")]
-sdat[sdat$site_id=="OCCAJ17", ]$xdim <- 3264
-sdat[sdat$site_id=="OCCAJ17", ]$ydim <- 2488
 
 #Create site-to-camera lookup table
 site.by.cam <- table(sdat$site_id, sdat$cam_id)
@@ -72,7 +70,7 @@ par(mfrow=c(1,2))
 lapply(smod, plot)
 
 #Predict positions (angle and radius) for animal data
-posdat <- predict.pos(file="./Gee data/full_data2.csv", mod=smod, fields="species")
+posdat <- predict.pos(file="./Gee data/new_full_data2.csv", mod=smod, fields="species")
 View(posdat)
 #Might want to check how many radii are infinite, or finite but improbably large
 sum(is.infinite(posdat$radius))
