@@ -1,37 +1,8 @@
 setwd("C:/Users/rowcliffe.m/Documents/GitHub/CTtracking")
 source("CTtracking.r")
 
-#Edit cam_cal file (new version created: cam_cal2)
-# (need to reshape annotations to give single uniqe pole_id, and rename some columns)
-dat <- read.csv("./Gee data/cam_cal.csv")
-seqan <- strsplit(as.character(dat$sequence_annotation), ";")
-i <- unlist(lapply(seqan, length))==3
-seqan <- seqan[i]
-dat <- dat[i,]
-id <- unlist(lapply(seqan, function(x) paste(x[1],x[2],sep=".")))
-dist <- unlist(lapply(seqan, function(x) x[1]))
-len <- unlist(lapply(seqan, function(x) x[3]))
-dat$sequence_annotation <- paste(id,dist,len, sep=";")
-names(dat)[names(dat)=="Camera_ID"] <- "cam_id"
-names(dat)[names(dat)=="xres"] <- "xdim"
-names(dat)[names(dat)=="yres"] <- "ydim"
-write.csv(dat, "./Gee data/cam_cal2.csv", row.names=F)
-
-#Edit full_data file (new version created: full_data2)
-# (need to create unique sequence_id values, convert height units cm to m, and rename some columns)
-dat <- read.csv("./Gee data/full_data.csv", stringsAsFactors=F)
-dat$sequence_id <- paste(dat$CTsite, dat$sequence_id, sep="_")
-hts <- as.numeric(dat$sequence_annotation)/100
-dat$sequence_annotation[!is.na(hts)] <- hts[!is.na(hts)]
-names(dat)[names(dat)=="CTsite"] <- "site_id"
-names(dat)[names(dat)=="Camera_ID"] <- "cam_id"
-names(dat)[names(dat)=="xres"] <- "xdim"
-names(dat)[names(dat)=="yres"] <- "ydim"
-write.csv(dat, "./Gee data/full_data2.csv", row.names=F)
-
-
 #Extract data for camera calibration model
-cdat <- read.poledat("./Gee data/cam_cal2.csv", "pole_id;distance;length")
+cdat <- read.poledat("./Gee data/cam_cal.csv", "pole_id;distance;length")
 View(cdat)
 
 #Fit camera calibration model(s)
@@ -42,20 +13,12 @@ par(mfrow=c(1,2))
 lapply(cmod, plot)
 
 #Extract data for camera calibration model
-sdat <- read.poledat("./Gee data/full_data2.csv", "height")
+sdat <- read.poledat("./Gee data/REM_dig.csv", "height")
 View(sdat)
 
-#FIXING A COUPLE OF PROBLEMS
-#
-#1. One site_id has no cam_id associated - assigning an arbitrary one for now 
-sdat$cam_id[sdat$cam_id==""] <- "B15"
-#
-#2. One site has more than one set of image dimensions - assigning arbitrary dimensions for now
-which(apply(table(sdat$site_id, sdat$xdim), 1, function(x) sum(x!=0)) > 1)
-which(apply(table(sdat$site_id, sdat$ydim), 1, function(x) sum(x!=0)) > 1)
-subset(sdat, site_id=="OCCAJ17")[,c("xdim","ydim")]
-sdat[sdat$site_id=="OCCAJ17", ]$xdim <- 3264
-sdat[sdat$site_id=="OCCAJ17", ]$ydim <- 2488
+#FIXING A PROBLEM
+#One site_id has no cam_id associated - assigning an arbitrary one for now 
+sdat$cam_id[sdat$cam_id==""] <- "B12"
 
 #Create site-to-camera lookup table
 site.by.cam <- table(sdat$site_id, sdat$cam_id)
@@ -72,12 +35,11 @@ par(mfrow=c(1,2))
 lapply(smod, plot)
 
 #Predict positions (angle and radius) for animal data
-posdat <- predict.pos(file="./Gee data/full_data2.csv", mod=smod, fields="species")
+posdat <- predict.pos(file="./Gee data/REM_dig.csv", mod=smod, fields="species")
 View(posdat)
 #Might want to check how many radii are infinite, or finite but improbably large
 sum(is.infinite(posdat$radius))
-sum(posdat$radius>10)
-posdat <- subset(posdat, radius<10)
+sum(posdat$radius>20)
 #Let's discuss what to do with these once you've had a closer look
 
 #Extract 1) trigger position data; and 2) movement sequence data
@@ -85,15 +47,23 @@ dat <- seq.summary(posdat, 0.5)
 View(dat$trigdat)
 View(dat$movdat)
 
+dat$trigdat$dtime <- decimal.time(dat$trigdat$Time)
+dat$trigdat$rtime <- dat$trigdat$dtime * 2*pi
+dat$trigdat$absangle <- abs(dat$trigdat$angle)
 
-#Check out distributions
-hist(dat$trigdat$radius, breaks=50)
-hist(abs(dat$trigdat$angle)*180/pi, breaks=50)
-hist(log10(dat$movdat$speed), breaks=20)
+write.csv(dat$trigdat, "./Gee data/trigdat.csv", row.names=F)
+write.csv(dat$movdat, "./Gee data/movdat.csv", row.names=F)
 
+    
 #############################################
 #REM ANALYSIS
 #############################################
+#Load data
+trigdat <- read.csv("./Gee data/trigdat.csv")
+movdat <- read.csv("./Gee data/movdat.csv")
+full.metadata <- read.csv("./Gee data/SVP_OC_2012-2017.csv")
+REM.full.dat <- read.csv("./Gee data/REM_full_data.csv")
+
 #Load source code for functions
 setwd("C:/Users/rowcliffe.m/Documents/GitHub/CTtracking")
 source("./Source code/REM_tools.r")
@@ -101,6 +71,7 @@ source("./Source code/distancedf.r")
 source("./Source code/SpeedCode.r")
 source("./Source code/traprate_code.r")
 library(activity)
+library(lubridate)
 
 #====================================================================
 #Detection function analysis
@@ -111,22 +82,19 @@ library(activity)
 #====================================================================
 #angle
 #====================================================================
-dat$trigdat$absangle <- abs(dat$trigdat$angle)
-unique(dat$trigdat$species)
 sp <- "Da"
-amodN <- fitdf(absangle~1, subset(dat$trigdat, species==sp))
-amodH <- fitdf(absangle~1, subset(dat$trigdat, species==sp), key="hr")
+amodN <- fitdf(absangle~1, subset(trigdat, species==sp))
+amodH <- fitdf(absangle~1, subset(trigdat, species==sp), key="hr")
 amodN$ddf$criterion
 amodH$ddf$criterion
 plot(amodN$ddf)
-plot(amodH$ddf)
 (angle <- amodN$edd)
 
 #====================================================================
 #distance
 #====================================================================
-dmodN<- fitdf(radius~1, subset(posdat, species==sp), transect="point")
-dmodH<- fitdf(radius~1, subset(posdat, species==sp), transect="point", key="hr")
+dmodN<- fitdf(radius~1, subset(trigdat, species==sp), transect="point")
+dmodH<- fitdf(radius~1, subset(trigdat, species==sp), transect="point", key="hr")
 dmodN$ddf$criterion
 dmodH$ddf$criterion
 plot(dmodN$ddf, pdf=TRUE)
@@ -139,10 +107,8 @@ plot(dmodH$ddf, pdf=TRUE)
 #2. Fit activity model (function fitact)
 #3. Plot model to inspect fit (function plot with CircFit object input)
 #====================================================================
-times <- rnorm(100,pi,1)
-
-times <- 2*pi* subset(dat$trigdat, species==sp)$time
-(activity <- fitact(times, reps=100, sample="data"))
+times <- subset(trigdat, species==sp & !is.na(rtime))$rtime
+(activity <- fitact(times, reps=100))
 plot(activity)
 
 #====================================================================
@@ -151,9 +117,9 @@ plot(activity)
 #2. Check AICs (information criterion) to select best model
 #3. Check goodness of fit of model (visual inspection of plots)
 #====================================================================
-speed.lognorm <- fit.spd(speed~1, subset(dat$movdat, species==sp), pdf="lnorm")
-speed.weibull <- fit.spd(speed~1, subset(dat$movdat, species==sp), pdf="weibull")
-speed.gamma <- fit.spd(speed~1, subset(dat$movdat, species==sp), pdf="gamma")
+speed.lognorm <- fit.spd(speed~1, subset(movdat, species==sp), pdf="lnorm")
+speed.weibull <- fit.spd(speed~1, subset(movdat, species==sp), pdf="weibull")
+speed.gamma <- fit.spd(speed~1, subset(movdat, species==sp), pdf="gamma")
 AIC(speed.lognorm)
 AIC(speed.weibull)
 AIC(speed.gamma)
@@ -181,12 +147,26 @@ paramSEs <- list(r=distance$se/1000, theta=angle$se*2,
 #Calculate density (function bootTRD)
 #====================================================================
 #Create dataframe summarising numbers of conacts and camera time per placment
-trdat <- make.tr.dat(tdat=subset(dat$trigdat, species==sp), sdat=)
-View(trdat)
-tr <- trdat$contacts/trdat$camdays
-sd(tr)/(sqrt(68) * mean(tr))
-unlist(paramSEs)/unlist(params)
+DateTime <- parse_date_time(paste(full.metadata$Date, full.metadata$Time),
+                c("d/m/Y H:M:S", "d/m/y H:M:S", "d/m/Y H:M", "d/m/y H:M"), "UTC")
+o <- as.POSIXct("1970-01-01 00:00:00", tz="UTC")
+start <- as.POSIXct(tapply(DateTime, full.metadata$CTsite, min), origin=o)
+stop <- as.POSIXct(tapply(DateTime, full.metadata$CTsite, max), origin=o)
+secs <- as.numeric(stop-start)
+days <- secs/(24*60^2)
+full.sitetimes <- data.frame(site_id=names(stop), start, stop, secs, days)
+View(full.sitetimes[order(days),])
+
+sites.used <- unique(REM.full.dat$site_id)
+sitedat <- subset(full.sitetimes, site_id %in% sites.used)
+View(sitedat[order(sitedat$days), ])
+
+trigs <- table(trigdat[ , c("site_id", "species")])
+sitedat[,c("Da","Lt","Mt")] <- 0
+sitedat[match(rownames(trigs), sitedat$site_id), c("Da","Lt","Mt")] <- trigs
+
+#Pending fixes, removing sites with missing dates and deployment length >80 days
+sitedat <- subset(sitedat, !is.na(days) & days<80)
 
 #Finally, the result
-(dens <- bootTRD(trdat$contacts, trdat$camdays, params, paramSEs))
-dens * RParea
+(dens <- bootTRD(sitedat[,sp], sitedat$days, params, paramSEs))
