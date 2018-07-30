@@ -107,6 +107,22 @@ merge.csv <- function(path, sitecol="site_id"){
 }
 
 #######################################################################################################
+#decimal.time
+#######################################################################################################
+#Converts text time data to decimal time of dat. Default format hh:mm:ss, but can handle 
+#other separators and minutes and seconds can be missing.
+decimal.time <- function(dat, sep=":"){
+  f <- function(x){
+    res <- as.numeric(x[1])
+    if(length(x)>1) res <- res+as.numeric(x[2])/60
+    if(length(x)>2) res <- res+as.numeric(x[3])/60^2
+    res/24
+  }
+  tt <- strsplit(dat, sep)
+  unlist(lapply(tt, f))
+}
+
+#######################################################################################################
 #read.poledat
 #######################################################################################################
 #Reads pole digitisation data for either camera or site calibration
