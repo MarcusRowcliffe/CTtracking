@@ -65,13 +65,35 @@ full.metadata <- read.csv("./Gee data/SVP_OC_2012-2017.csv")
 REM.full.dat <- read.csv("./Gee data/REM_full_data.csv")
 
 #Load source code for functions
-setwd("C:/Users/rowcliffe.m/Documents/GitHub/CTtracking")
 source("./Source code/REM_tools.r")
 source("./Source code/distancedf.r")
 source("./Source code/SpeedCode.r")
 source("./Source code/traprate_code.r")
 library(activity)
 library(lubridate)
+
+#Create dataframe summarising numbers of conacts and camera time per placment
+DateTime <- parse_date_time(paste(full.metadata$Date, full.metadata$Time),
+                            c("d/m/Y H:M:S", "d/m/y H:M:S", "d/m/Y H:M", "d/m/y H:M"), "UTC")
+o <- as.POSIXct("1970-01-01 00:00:00", tz="UTC")
+start <- as.POSIXct(tapply(DateTime, full.metadata$CTsite, min), origin=o)
+stop <- as.POSIXct(tapply(DateTime, full.metadata$CTsite, max), origin=o)
+secs <- as.numeric(stop-start)
+days <- secs/(24*60^2)
+full.sitetimes <- data.frame(site_id=names(stop), start, stop, secs, days)
+View(full.sitetimes[order(days),])
+
+sites.used <- unique(REM.full.dat$site_id)
+sitedat <- subset(full.sitetimes, site_id %in% sites.used)
+View(sitedat[order(sitedat$days), ])
+
+trigs <- table(trigdat[ , c("site_id", "species")])
+sitedat[,c("Da","Lt","Mt")] <- 0
+sitedat[match(rownames(trigs), sitedat$site_id), c("Da","Lt","Mt")] <- trigs
+
+#Pending fixes, removing sites with missing dates and deployment length >80 days
+sitedat <- subset(sitedat, !is.na(days) & days<80)
+
 
 #====================================================================
 #Detection function analysis
@@ -146,27 +168,6 @@ paramSEs <- list(r=distance$se/1000, theta=angle$se*2,
 #====================================================================
 #Calculate density (function bootTRD)
 #====================================================================
-#Create dataframe summarising numbers of conacts and camera time per placment
-DateTime <- parse_date_time(paste(full.metadata$Date, full.metadata$Time),
-                c("d/m/Y H:M:S", "d/m/y H:M:S", "d/m/Y H:M", "d/m/y H:M"), "UTC")
-o <- as.POSIXct("1970-01-01 00:00:00", tz="UTC")
-start <- as.POSIXct(tapply(DateTime, full.metadata$CTsite, min), origin=o)
-stop <- as.POSIXct(tapply(DateTime, full.metadata$CTsite, max), origin=o)
-secs <- as.numeric(stop-start)
-days <- secs/(24*60^2)
-full.sitetimes <- data.frame(site_id=names(stop), start, stop, secs, days)
-View(full.sitetimes[order(days),])
-
-sites.used <- unique(REM.full.dat$site_id)
-sitedat <- subset(full.sitetimes, site_id %in% sites.used)
-View(sitedat[order(sitedat$days), ])
-
-trigs <- table(trigdat[ , c("site_id", "species")])
-sitedat[,c("Da","Lt","Mt")] <- 0
-sitedat[match(rownames(trigs), sitedat$site_id), c("Da","Lt","Mt")] <- trigs
-
-#Pending fixes, removing sites with missing dates and deployment length >80 days
-sitedat <- subset(sitedat, !is.na(days) & days<80)
 
 #Finally, the result
 (dens <- bootTRD(sitedat[,sp], sitedat$days, params, paramSEs))
