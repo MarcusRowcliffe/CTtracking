@@ -1,15 +1,93 @@
 setClass("camcal", representation("list"))
 setClass("sitecal", representation("list"))
 require(data.table)
+library(magick)
 
 # Code to extract stills from camera trap videos - UNFINISHED
 
 # need to install ffmpeg - as far as I understood it's a command line software
 # I had to google how to instal it and found a good tutorial on youtube
 
-#library(imager)
-#library(stringr)
-extract.frames <- function(){
+#Download ffmpeg build
+#Unzip and rename resulting folder FFmpeg
+#Copy FFmpeg folder to an appropriate location (e.g root directory C:\)
+#Open system environment variables (search from start menu)
+#In the system variables box, highlight the Path entry and click Edit
+#In the new dialogue, click New and type or paste the path of the FFmpeg/bin folder (e.g. C:\FFmpeg\bin)
+#OK
+#Video tutorial here: https://www.youtube.com/watch?v=pHR3ttH5t-w
+
+#Crop image files in infolder and move to outfolder 
+#exf: dataframe of exif data from infolder
+move.images <- function(infolder, outfolder, exf=NULL, crop=TRUE, imgtype=".JPG", suffix="-01."){
+  if(is.null(exf)) exf <- read.exif(infolder, subdirs=FALSE)
+  stills <- list.files(infolder, imgtype)
+  imgs <- image_read(paste0(infolder, "/", stills))
+  if(crop){
+    imgW <- unique(subset(exf, FileType=="JPEG")$ImageWidth)
+    imgH <- unique(subset(exf, FileType=="JPEG")$ImageHeight)
+    vidW <- unique(subset(exf, FileType=="MP4")$ImageWidth)
+    vidH <- unique(subset(exf, FileType=="MP4")$ImageHeight)
+    Hmargin <- (imgH-vidH)/2
+    Wmargin <- (imgW-vidW)/2
+    imgs <- image_crop(imgs, paste0(vidW,"x",vidH,"+",Wmargin,"+",Hmargin))
+  }
+  for(i in 1:length(stills))
+    image_write(imgs[i], paste0(outfolder, "/", gsub("\\.", suffix, stills[i])))
+}
+
+extract.frames <- function(infolder, outfolder, 
+                           fpath="C:/FFmpeg", epath="C:/Users/Rowcliffe.M/Documents/APPS/ExifTool",
+                           vidtype=".MP4", imgtype=".JPG", fps=0.5, delete.first=FALSE){
+  fullfiles <- list.files(infolder, vidtype)
+  files <- gsub(vidtype, "", fullfiles)
+  exf <- read.exif(infolder, subdirs=FALSE)
+  dt <- strptime(exf$CreateDate, "%Y:%m:%d %H:%M:%S", tz="UTC")[exf$FileType=="MP4"]
+  
+  for(i in 1:length(files)){
+    wd <- getwd()
+#Extract stills
+    setwd(fpath)
+    cmd <- paste0("ffmpeg -i ", infolder, "/", fullfiles[i], 
+                  " -r ", fps, " ",
+                  outfolder, "/", files[i], "-%02d.jpg")
+    shell(cmd)
+
+#Add CreateDate field to metadata
+    setwd(epath)
+    newfiles <- list.files(outfolder, files[i], full.names=TRUE)
+    if(delete.first==TRUE){
+      file.remove(newfiles[1])
+      newfiles <- newfile[-1]
+    }
+    newdates <- as.character(dt[i]+(0:(length(newfiles)-1))/fps)
+    for(j in 1:length(newfiles)){
+      (cmd <- paste0('exiftool -createdate="', newdates[j-1], '" ',
+                    newfiles[j], " ",
+                    "-overwrite_original"))
+      shell(cmd)
+    }
+  }
+  setwd(wd)
+}
+
+inf <- "C:/Users/rowcliffe.m/Documents/CameraTrapping/REM/Calibration/Mytool/AndreLanna"
+exf <- read.exif(inf)
+times <- strptime(exf$CreateDate[1:34], "%Y:%m:%d %H:%M:%S", tz="UTC")
+(fps <- 1 / as.numeric(mean(times[2*(1:17)] - times[2*(1:17)-1])))
+
+inf <- "C:/Users/rowcliffe.m/Documents/CameraTrapping/REM/Calibration/Mytool/AndreLanna/test"
+ouf <- "C:/Users/rowcliffe.m/Documents/CameraTrapping/REM/Calibration/Mytool/AndreLanna/test/stills"
+extract.frames(inf, ouf, fps=0.1)
+move.images(inf, ouf)
+exf <- read.exif(ouf)
+View(exf)
+exf$CreateDate
+
+
+
+  library(imager)
+  library(stringr)
   origem_arquivos_video  <- choose.dir(, "choose folder with original files") 
   destino_arquivos_foto  <- choose.dir(, "choose folder to send jpgs")
   'from here it executes the code at the selected files'
@@ -28,7 +106,6 @@ extract.frames <- function(){
       save.image(frame(vdframes, n), nome_arquivo)
     }
   }  
-}
 
 #######################################################################################################
 #read.exif
@@ -47,14 +124,19 @@ extract.frames <- function(){
 #OUTPUT
 #A dataframe of metadata. A csv file of the data called metadata.csv is also created (or 
 #overwritten without warning) within infolder
-read.exif <- function(infolder, exifpath="C:/Users/Rowcliffe.M/Documents/APPS/ExifTool"){
+read.exif <- function(infolder, outfolder=NULL, return=TRUE, write=FALSE, subdirs=TRUE,
+                      exifpath="C:/Users/Rowcliffe.M/Documents/APPS/ExifTool"){
   wd <- getwd()
   setwd(exifpath)
-  setwd(wd)
-  outfile <- paste0(infolder, "/metadata.csv")
-  cmd <- paste("exiftool -r -csv", infolder, ">", outfile)
+  if(is.null(outfolder)) outfolder <- infolder
+  outfile <- paste0(outfolder, "/metadata.csv")
+  if(subdirs==TRUE) sbd<-"-r" else sbd <- ""
+  cmd <- paste("exiftool", sbd, "-csv", infolder, ">", outfile)
   shell(cmd)
-  return(read.csv(outfile))
+  setwd(wd)
+  res <- read.csv(outfile, stringsAsFactors = FALSE)
+  if(write==FALSE) file.remove(outfile)
+  if(return==TRUE) return(res)
 }
 
 #######################################################################################################
@@ -109,7 +191,7 @@ merge.csv <- function(path, sitecol="site_id"){
 #######################################################################################################
 #decimal.time
 #######################################################################################################
-#Converts text time data to decimal time of dat. Default format hh:mm:ss, but can handle 
+#Converts text time data to decimal time of day. Default format hh:mm:ss, but can handle 
 #other separators and minutes and seconds can be missing.
 decimal.time <- function(dat, sep=":"){
   f <- function(x){
@@ -118,7 +200,7 @@ decimal.time <- function(dat, sep=":"){
     if(length(x)>2) res <- res+as.numeric(x[3])/60^2
     res/24
   }
-  tt <- strsplit(dat, sep)
+  tt <- strsplit(as.character(dat), sep)
   unlist(lapply(tt, f))
 }
 
