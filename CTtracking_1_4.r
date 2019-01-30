@@ -132,7 +132,7 @@ extract <- function(fps, file, outpath, toolpath="C:/FFmpeg/bin", suffix.length=
 #######################################################################################################
 #Adds a time stamp to images extracted from video. Calculates stamp values from video start
 #time and the frame rate used for extraction. Function requires .ExifTool_config file to be
-#placed in the ExifTool folder.
+#placed in the ExifTool folder to define bespoke metadata fields.
 
 #INPUT
 # fps: the frame rate used for extraction (frames per second)
@@ -173,7 +173,10 @@ stamptime <- function(fps, path, vexf, toolpath="C:/Exiftool", offset=0, recursi
   dfile <- paste(wd, "dirs.txt", sep="/")
   write.csv(exf, mfile, row.names=FALSE)
   write.table(dirs, dfile, row.names=FALSE, col.names = FALSE, quote=FALSE)
-  cmd <- paste0("exiftool -csv=", mfile, " -@ ", dfile, " -overwrite_original")
+
+  cmd <- paste0("exiftool -csv=", paste0("\"", mfile, "\""),
+                " -@ ", paste0("\"", dfile, "\""),
+                " -overwrite_original")
   shell(cmd)
   file.remove(mfile)
   file.remove(dfile)
@@ -229,7 +232,7 @@ copy.images <- function(inpath, outpath, exf=NULL, vidtypes=c("MP4", "AVI"), too
         warning("Images and videos have mixed dimensions - directory ignored: ", inpath) else
       if(!icongruent)
         warning("Images have mixed dimensions - directory ignored: ", inpath) else
-      if(!icongruent | !vcongruent)
+      if(!vcongruent)
         warning("Videos have mixed dimensions - directory ignored: ", inpath)
       return()
     }
@@ -243,6 +246,7 @@ copy.images <- function(inpath, outpath, exf=NULL, vidtypes=c("MP4", "AVI"), too
       wd <- getwd()
       setwd(toolpath)
       file.copy(iexf$SourceFile, outpath, copy.date=TRUE)
+      outpath <- paste0("\"", outpath, "\"")
       cmd <- paste0("exiftool -m -videoxorigin=", Worigin, " -videoyorigin=", Horigin, 
                     " -videowidthonimage=", W, " ", " -videoheightonimage=", H, 
                     " -videowidth=", vidW, " ", " -videoheight=", vidH, 

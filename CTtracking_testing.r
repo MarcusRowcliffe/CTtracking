@@ -1,17 +1,18 @@
-source("C:/Users/rowcliffe.m/Documents/GitHub/CTtracking/CTtracking_1_4.r")
+source("C:/Users/rowcliffe.m/Documents/OneDriveZSL/GitHub/CTtracking/CTtracking_1_4.r")
 
-dir <- "C:/Users/rowcliffe.m/Documents/CameraTrapping/REM/Calibration/Mytool/AndreLanna/test2"
-remove.file.spaces(dir)
+dir <- "C:/Users/rowcliffe.m/Documents/OneDriveZSL/CameraTrapping/REM/Calibration/Mytool/AndreLanna/test2"
 exf <- read.exif(dir)
 exf$CreateDate
 times <- strptime(exf$CreateDate[1:34], "%Y:%m:%d %H:%M:%S", tz="UTC")
 (fps <- 1 / as.numeric(mean(times[2*(1:17)] - times[2*(1:17)-1])))
 
-inf <- "C:/Users/rowcliffe.m/Documents/CameraTrapping/REM/Calibration/Mytool/AndreLanna/test2/f1"
+inf <- "C:/Users/rowcliffe.m/Documents/OneDriveZSL/CameraTrapping/REM/Calibration/Mytool/AndreLanna/test2/f1"
 outf <- paste0(inf, "_frames")
-extract.frames(0.1, inf, outf, copy.jpegs=TRUE, stamp.time=FALSE)
+debug(stamptime)
+extract.frames(0.1, inf, outf, copy.jpegs=TRUE, stamp.time=TRUE, crop=TRUE)
 exf <- read.exif(outf)
 View(exf)
+exf[,c("FileName", "CreateDate")]
 crop(outf, outf, suffix="-cropped")
 
 inf <- "C:/Users/rowcliffe.m/Documents/CameraTrapping/REM/Calibration/Mytool/AndreLanna/test2/f2"
