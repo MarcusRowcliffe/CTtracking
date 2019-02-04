@@ -207,8 +207,9 @@ stamptime <- function(fps, path, vexf, toolpath="C:/Exiftool", offset=0, recursi
 # x.offset, y.offset: number of image pixels by which the video field of view is displaced
 
 #OUTPUT
-# Creates a copy of images, either:
-#  Cropped to conform field of view to that of the equivalent video frames OR
+# Creates a copy of images, EITHER:
+#  Cropped to conform field of view to that of the equivalent video frames,
+# OR:
 #  Uncropped but with the following metadata added decribing how image and video fields of view
 #  map onto one another:
 #   VideoWidth, VideoHeight: video pixel resolution
