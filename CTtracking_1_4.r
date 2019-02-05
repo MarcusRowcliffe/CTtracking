@@ -365,3 +365,40 @@ list.files.only <- function(dir, ...){
   if(!fn) res <- basename(res)
   res
 }
+
+
+#######################################################################################################
+#read.digidat
+#######################################################################################################
+#Reads files emerging from animal tracker containing image digitisation data.
+#
+#Input dir should point to a directory containing the digisation data csv file AND the 
+
+#INPUT
+# dir: name of file (minus .csv extension) containing digitisation data; name of directory containing digitised images
+# outpath: a character string giving the path of the folder in which to place results file (defaults to inpath)
+# toolpath: a character string giving the path of the folder containing exiftool.exe
+# return: should the function return the results as a dataframe
+# write: should the function return the results as a new .csv file within outpath
+# recursive: whether subdirectories of inpath should also be searched for images
+
+#OUTPUT
+# A dataframe of the original digitisation data
+read.digidat <- function(dir, path=get.wd(), path.img=path){
+  dfile <- paste0(path, "/", dir, ".csv")
+  ddat <- read.csv(dfile, stringsAsFactors = FALSE)
+  file.path(path.img, dir)
+  mdat <- read.exif(path.img)
+  ddat$x.original <- ddat$x
+  ddat$y.original <- ddat$y
+  i <- match(ddat$filename, mdat$FileName)
+  ddat <- cbind(ddat,
+                mdat[i, c("FileSource", "CreateDate", "SourceFile", "Directory", 
+                          "ImageHeight", "ImageWidth",
+                          "VideoHeight", "VideoHeightOnImage", "VideoXorigin",
+                          "VideoWidth", "VideoWidthOnImage", "VideoYorigin")])
+  j <- ddat$FileSource!=""
+  ddat$x[j] <- with(ddat[j,], VideoHeight * (x-VideoXorigin) / VideoHeightOnImage)
+  ddat$y[j] <- with(ddat[j,], VideoWidth * (y-VideoYorigin) / VideoWidthOnImage)
+  ddat
+}
