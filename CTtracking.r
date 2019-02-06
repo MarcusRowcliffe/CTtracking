@@ -186,7 +186,6 @@ merge.csv <- function(path, sitecol="site_id"){
   write.csv(df, paste0(mpth,"/merged.csv"), row.names=FALSE)
 }
 
-<<<<<<< HEAD
 #######################################################################################################
 #decimal.time
 #######################################################################################################
@@ -206,8 +205,6 @@ decimal.time <- function(dat, sep=":"){
 #######################################################################################################
 #read.poledat
 #######################################################################################################
-=======
->>>>>>> a60d7aa01247219561f03d925ed7e8db3cbeed5c
 #Reads pole digitisation data for either camera or site calibration
 #INPUT
 # file: character string giving name of tracker output csv file to read (including path if not in working directory)
