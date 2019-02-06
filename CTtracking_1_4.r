@@ -368,6 +368,27 @@ list.files.only <- function(dir, ...){
 }
 
 #######################################################################################################
+#split.annotations
+#######################################################################################################
+#
+split.annotations <- function(dat, colnames=NULL, sep=";"){
+  lst <- strsplit(dat, ";")
+  seps <- unique(unlist(lapply(lst, length)))
+  
+  if(length(seps)>1) stop("Not all annotations have the same number of separators")
+  if(is.null(colnames)){
+    colnames <- paste0("X",1:seps)
+  }else if(seps!=length(colnames)) 
+    stop("Number of column names is not equal to the number of annotations")
+  
+  d <- data.frame(Reduce(rbind, lst), stringsAsFactors=F)
+  d <- type.convert(d, as.is=T)
+  names(d) <- colnames
+  rownames(d) <- NULL
+  d
+}
+
+#######################################################################################################
 #read.digidat
 #######################################################################################################
 #Reads and merges csv files of digitisation data from animaltracker tool.
@@ -397,7 +418,8 @@ list.files.only <- function(dir, ...){
 # optionally, columns specified by exifcols input are added from the image metadata.
 read.digidat <- function(path,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
-                        trans.xy=c("none", "img.to.vid", "vid.to.img")){
+                        trans.xy=c("none", "img.to.vid", "vid.to.img"),
+                        annotations=NULL){
   renumber <- function(x){
     res <- diff(x)
     res[res!=0] <- 1
@@ -850,3 +872,4 @@ seq.summary <- function(dat, interval){
   i <- dat$sequence_id %in% names(n)[n==1]
   list(trigdat=subset(dat, i), movdat=calc.mov(subset(dat, !i)))
 }
+
