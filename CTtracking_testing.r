@@ -83,9 +83,10 @@ exf$RelativeResolution
 
 ######################################################
 
-dr <- "B200Fa"
 pt <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool/AndreLanna/Processing example data/test"
 
+dat <- read.digidat(pt, exifcols=NULL)
+dat <- read.digidat(pt)
 dat <- read.digidat(pt, trans.xy="vid")
 View(dat)
 

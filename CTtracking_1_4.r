@@ -404,7 +404,8 @@ read.digidat <- function(path,
   }
   
   trans.xy <- match.arg(trans.xy)
-  message("Merging csv files...")
+
+  message("Merging csv files... ", appendLF=FALSE)
   files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
   df.list <- lapply(files, read.csv, stringsAsFactors=FALSE)
   
@@ -419,9 +420,10 @@ read.digidat <- function(path,
   df$sequence_id_original <- df$sequence_id
   df$sequence_id <- renumber(df$sequence_id)
   df$site_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
+  message("DONE.")
   
   if(!is.null(exifcols) | trans.xy!="none"){
-    message("Reading metadata...")
+    message("Reading and appending metadata... ")
     exifdat <- read.exif(path)
     exifdat <- exifdat[match(df$filename, exifdat$FileName), ]
     df <- cbind(df, exifdat[, exifcols])
@@ -429,7 +431,7 @@ read.digidat <- function(path,
   }
 
   if(trans.xy!="none"){
-    message("Translating pixels...")
+    message("Translating pixels... ", appendLF=FALSE)
     if(!"VideoHeight" %in% names(exifdat))
       stop("No video info found in image metadata - must be there if pixel translation is specified (trans.xy!=\"none\"")
 
@@ -444,6 +446,7 @@ read.digidat <- function(path,
       df$x[j] <- with(exifdat[j,], VideoXorigin + VideoHeightOnImage*df$x[j] / VideoHeight)
       df$y[j] <- with(exifdat[j,], VideoYorigin + VideoWidthOnImage*df$y[j] / VideoWidth)
     }
+    message("DONE.")
   }
   df
 }
