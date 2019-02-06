@@ -419,11 +419,7 @@ read.digidat <- function(path,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img"),
                         annotations=NULL){
-  renumber <- function(x){
-    res <- diff(x)
-    res[res!=0] <- 1
-    c(0, cumsum(res))
-  }
+  renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
   
   trans.xy <- match.arg(trans.xy)
 
@@ -441,7 +437,7 @@ read.digidat <- function(path,
   df <- bind_rows(df.list)
   df <- cbind(df, split.annotations(df$sequence_annotation, annotations))
   df$sequence_id_original <- df$sequence_id
-  df$sequence_id <- renumber(df$sequence_id)
+  df$sequence_id <- renumber(paste0(dat$site_id, dat$sequence_id))
   df$site_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
   message("DONE.")
   
