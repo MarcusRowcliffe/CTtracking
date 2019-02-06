@@ -372,13 +372,15 @@ list.files.only <- function(dir, ...){
 #read.digidat
 #######################################################################################################
 #Reads and merges csv files of digitisation data from animaltracker tool.
-#
-#Optionally adds metadata from the original images. In cases where images are a mix of image and 
-#video frame, also optionally translates x,y pixel positions from image to video scale or vice versa.
-#Input path should point to a directory containing the digisation data csv files, and if EITHER
-#pixel translation OR exifcols are specified OR, a folder containing the digitised images.
-#The root directory must contain ONLY those csv files to be processed. The csv file names are assumed
-#to be site IDs.
+
+#- Input path should point to a directory containing the digisation data csv files, and if EITHER
+#  pixel translation OR exifcols are specified, the digitised images.
+#- The root directory must contain ONLY those csv files to be processed.
+#- The csv file names are assumed to be site IDs.
+#- Optionally adds metadata from the original images. 
+#- In cases where images are a mix of image and video frame, also optionally translates x,y pixel
+#  positions from image to video scale or vice versa.
+#- IMPORTANT: where image metadata are accessed, all images in the path must have unique names
 
 #INPUT
 # path: name of directory containing all required files (see above)
