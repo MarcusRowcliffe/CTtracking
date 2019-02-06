@@ -373,18 +373,27 @@ list.files.only <- function(dir, ...){
 #######################################################################################################
 #Reads and merges csv files of digitisation data from animaltracker tool.
 #
-#Input path should point to a directory containing the digisation data csv files 
-#and if either add.exif or exifdat are TRUE, a folder containing the digitised images.
-#The root directory must contain ONLY those files to be processed.
+#Optionally adds metadata from the original images. In cases where images are a mix of image and 
+#video frame, also optionally translates x,y pixel positions from image to video scale or vice versa.
+#Input path should point to a directory containing the digisation data csv files, and if EITHER
+#pixel translation OR exifcols are specified OR, a folder containing the digitised images.
+#The root directory must contain ONLY those csv files to be processed. The csv file names are assumed
+#to be site IDs.
 
 #INPUT
 # path: name of directory containing all required files (see above)
-# 
+# exifcols: data columns from image metadata to add to the merged dataframe
+# trans.xy: type of pixel translation to apply, with options:
+#   "none": no translation
+#   "img.to.vid": all image file pixel positions are translated to the video scale
+#   "vid.to.img": all video file pixel positions are translated to the image scale
 
 #OUTPUT
-# A dataframe of the original digitisation data, with x,y values optionally adjusted for image-to-video frame
-# conversion using image metadata (in which case the original x,y values are preserved as x.original,y.original), 
-# plus corresponding data from exifcols columns of exifdat.
+# A dataframe of the original digitisation data, with sequence_id column reassigned to give unique values
+# to each sequence across the whole dataframe (with original IDs preserved as sequence_id_original), plus
+# new column site_id holding values taken from input csv file names. Optionally, x,y values are translated from
+# image to video scale or vice versa, with original x,y values are preserved x.original,y.original. Also
+# optionally, columns specified by exifcols input are added from the image metadata.
 read.digidat <- function(path,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
