@@ -375,10 +375,9 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
   lst <- strsplit(dat, ";")
   seps <- unique(unlist(lapply(lst, length)))
   
-  if(length(seps)>1) stop("Not all annotations have the same number of separators")
-  if(is.null(colnames)){
-    colnames <- paste0("X",1:seps)
-  }else if(seps!=length(colnames)) 
+  if(length(seps)>1) stop("Not all annotations have the same number of entries")
+  if(is.null(colnames)) colnames <- paste0("X",1:seps) else
+  if(seps!=length(colnames))
     stop("Number of column names is not equal to the number of annotations")
   
   d <- data.frame(Reduce(rbind, lst), stringsAsFactors=F)
@@ -440,6 +439,7 @@ read.digidat <- function(path,
     stop("Not all files have the same column headings")
   
   df <- bind_rows(df.list)
+  df <- cbind(df, split.annotations(df$sequence_annotation, annotations))
   df$sequence_id_original <- df$sequence_id
   df$sequence_id <- renumber(df$sequence_id)
   df$site_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
