@@ -415,15 +415,13 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # new column site_id holding values taken from input csv file names. Optionally, x,y values are translated from
 # image to video scale or vice versa, with original x,y values are preserved x.original,y.original. Also
 # optionally, columns specified by exifcols input are added from the image metadata.
-read.digidat <- function(path,
+read.digidat <- function(path, exifdat=NULL, annotations=NULL,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
-                        trans.xy=c("none", "img.to.vid", "vid.to.img"),
-                        annotations=NULL){
+                        trans.xy=c("none", "img.to.vid", "vid.to.img")){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
   
   trans.xy <- match.arg(trans.xy)
 
-  message("Merging csv files... ", appendLF=FALSE)
   files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
   df.list <- lapply(files, read.csv, stringsAsFactors=FALSE)
   
@@ -437,20 +435,17 @@ read.digidat <- function(path,
   df <- bind_rows(df.list)
   df <- cbind(df, split.annotations(df$sequence_annotation, annotations))
   df$sequence_id_original <- df$sequence_id
-  df$sequence_id <- renumber(paste0(dat$site_id, dat$sequence_id))
+  df$sequence_id <- renumber(paste0(df$site_id, df$sequence_id))
   df$site_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
-  message("DONE.")
-  
+
   if(!is.null(exifcols) | trans.xy!="none"){
-    message("Reading and appending metadata... ")
-    exifdat <- read.exif(path)
+    if(is.null(exifdat)) exifdat <- read.exif(path)
     exifdat <- exifdat[match(df$filename, exifdat$FileName), ]
     df <- cbind(df, exifdat[, exifcols])
     rownames(df) <- 1:nrow(df)
   }
 
   if(trans.xy!="none"){
-    message("Translating pixels... ", appendLF=FALSE)
     if(!"VideoHeight" %in% names(exifdat))
       stop("No video info found in image metadata - must be there if pixel translation is specified (trans.xy!=\"none\"")
 
@@ -465,7 +460,6 @@ read.digidat <- function(path,
       df$x[j] <- with(exifdat[j,], VideoXorigin + VideoHeightOnImage*df$x[j] / VideoHeight)
       df$y[j] <- with(exifdat[j,], VideoYorigin + VideoWidthOnImage*df$y[j] / VideoWidth)
     }
-    message("DONE.")
   }
   df
 }
@@ -487,13 +481,11 @@ decimal.time <- function(dat, sep=":"){
 }
 
 #######################################################################################################
-#read.poledat
+#make.poledat
 #######################################################################################################
 #Reads pole digitisation data for either camera or site calibration
 #INPUT
 # file: character string giving name of tracker output csv file to read (including path if not in working directory)
-# fields: single character string giving column headings for the sequence_annotation field, with names separated by sep
-# sep: single character separating the column names in fields
 #
 #Use the following column names within fields when the relevant information is present:
 # cam_id: camera identifier
@@ -507,59 +499,47 @@ decimal.time <- function(dat, sep=":"){
 #Returns the input data minus x, y and sequence_annotation, plus columns:
 # xb, yb, xt, yt: x and y co-ordinates of pole b(ases) and t(ops)
 #Records are discarded if they have non-numeric distance, length or height values
-read.poledat <- function(file, fields, sep=";"){
-  dat <- read.csv(file, stringsAsFactors=FALSE)
-  col.names <- unlist(strsplit(fields, sep))
-  if(gregexpr(sep,fields)[[1]][1]==-1) notes <- dat$sequence_annotation else
-    notes <- strsplit(dat$sequence_annotation, sep)
-  
-  if(any(unlist(lapply(notes, length))!=length(col.names)))
-    stop(paste("fields gives", length(col.names), "headings but some annotations do not have this many entries"))
-  
-  notes <- matrix(unlist(notes), nrow=nrow(dat), byrow=T, dimnames=list(NULL, col.names))
-  dat2 <- cbind(matrix.data.frame(notes), subset(dat, select=-c(sequence_annotation)))
-  
-  if("height" %in% names(dat2)){
-    dat2$height <- suppressWarnings(as.numeric(as.character(dat2$height)))
-    dat2 <- subset(dat2, !is.na(height))
+
+make.poledat <- function(dat){
+
+  if("height" %in% names(dat)){
+    dat$height <- suppressWarnings(as.numeric(as.character(dat$height)))
+    dat <- subset(dat, !is.na(height))
   }
-  if("distance" %in% names(dat2)){
-    dat2$height <- suppressWarnings(as.numeric(as.character(dat2$distance)))
-    dat2 <- subset(dat2, !is.na(distance))
+  if("distance" %in% names(dat)){
+    dat$height <- suppressWarnings(as.numeric(as.character(dat$distance)))
+    dat <- subset(dat, !is.na(distance))
   }
-  if("length" %in% names(dat2)){
-    dat2$height <- suppressWarnings(as.numeric(as.character(dat2$length)))
-    dat2 <- subset(dat2, !is.na(length))
+  if("length" %in% names(dat)){
+    dat$height <- suppressWarnings(as.numeric(as.character(dat$length)))
+    dat <- subset(dat, !is.na(length))
   }
   
-  if("site_id" %in% names(dat2))
-    dat2$pole_id <- paste(dat2$site_id, dat2$frame_number, sep="_") else
-      if("cam_id" %in% names(dat2))
-        dat2$pole_id <- paste(dat2$cam_id, dat2$pole_id, sep="_") else
-          if(!"pole_id" %in% names(dat2))
-            dat2$pole_id <- dat2$frame_number
+  if(!"pole_id" %in% names(dat))
+    dat$pole_id <- paste(dat$directory, dat$frame_number, sep="_") else
+      dat$pole_id <- dat$frame_number
   
-  tab <- table(dat2$pole_id)
+  tab <- table(dat$pole_id)
   duff <- !tab==2
   if(any(duff)){
-    dat2 <- droplevels(dat2[!dat2$pole_id %in% names(which(duff)), ])
+    dat <- droplevels(dat[!dat$pole_id %in% names(which(duff)), ])
     warning(paste("Some poles did not have exactly 2 points digitised and were removed:", 
                   paste(names(which(duff)), collapse=" ")))
   }
   if("distance" %in% col.names){
-    duff <- with(dat2, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
+    duff <- with(dat, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
     if(any(duff))
       stop(paste("Some poles did not have matching distance for top and base:",
                  paste(names(which(duff)), collapse=" ")))
   }
   
-  dat2 <- dat2[order(dat2$pole_id, dat2$y), ]
-  i <- 2*(1:(nrow(dat2)/2))
-  xy <- cbind(dat2[i, c("x","y")], dat2[i-1, c("x","y")])
+  dat <- dat[order(dat$pole_id, dat$y), ]
+  i <- 2*(1:(nrow(dat)/2))
+  xy <- cbind(dat[i, c("x","y")], dat[i-1, c("x","y")])
   names(xy) <- c("xb","yb","xt","yt")
   if("height" %in% col.names)
-    xy <- cbind(xy, hb=dat2$height[i], ht=dat2$height[i-1])
-  res <- cbind(dat2[i, !(names(dat2) %in% c("height","x","y"))], xy)
+    xy <- cbind(xy, hb=dat$height[i], ht=dat$height[i-1])
+  res <- cbind(dat[i, !(names(dat) %in% c("height","x","y"))], xy)
   
   if("height" %in% col.names){
     duff <- res$hb>=res$ht
