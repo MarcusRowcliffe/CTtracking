@@ -79,3 +79,18 @@ exf <- read.exif("C:/Users/rowcliffe.m/Documents/CameraTrapping/REM/Calibration/
 exf$vide
 exf$XOrigin
 exf$RelativeResolution
+
+
+######################################################
+
+dr <- "B200Fa"
+pt <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool/AndreLanna/Processing example data/test"
+
+dat <- read.digidat(pt, trans.xy="vid")
+View(dat)
+
+par(mfrow=c(2,1))
+sq <- 9
+with(subset(dat, sequence_id==sq), plot(x,-y,type="b", asp=1))
+with(subset(dat, sequence_id==sq), plot(x.original,-y.original,type="b", asp=1))
+
