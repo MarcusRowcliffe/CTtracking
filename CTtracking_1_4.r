@@ -1,4 +1,5 @@
 require(magick)
+require(dplyr)
 
 #######################################################################################################
 #extract.frames
@@ -370,35 +371,70 @@ list.files.only <- function(dir, ...){
 #######################################################################################################
 #read.digidat
 #######################################################################################################
-#Reads files emerging from animal tracker containing image digitisation data.
+#Reads and merges csv files of digitisation data from animaltracker tool.
 #
-#Input dir should point to a directory containing the digisation data csv file AND the 
+#Input path should point to a directory containing the digisation data csv files 
+#and if either add.exif or exifdat are TRUE, a folder containing the digitised images.
+#The root directory must contain ONLY those files to be processed.
 
 #INPUT
-# dir: name of file (minus .csv extension) containing digitisation data; name of directory containing digitised images
-# outpath: a character string giving the path of the folder in which to place results file (defaults to inpath)
-# toolpath: a character string giving the path of the folder containing exiftool.exe
-# return: should the function return the results as a dataframe
-# write: should the function return the results as a new .csv file within outpath
-# recursive: whether subdirectories of inpath should also be searched for images
+# path: name of directory containing all required files (see above)
+# 
 
 #OUTPUT
-# A dataframe of the original digitisation data
-read.digidat <- function(dir, path=get.wd(), path.img=path){
-  dfile <- paste0(path, "/", dir, ".csv")
-  ddat <- read.csv(dfile, stringsAsFactors = FALSE)
-  file.path(path.img, dir)
-  mdat <- read.exif(path.img)
-  ddat$x.original <- ddat$x
-  ddat$y.original <- ddat$y
-  i <- match(ddat$filename, mdat$FileName)
-  ddat <- cbind(ddat,
-                mdat[i, c("FileSource", "CreateDate", "SourceFile", "Directory", 
-                          "ImageHeight", "ImageWidth",
-                          "VideoHeight", "VideoHeightOnImage", "VideoXorigin",
-                          "VideoWidth", "VideoWidthOnImage", "VideoYorigin")])
-  j <- ddat$FileSource!=""
-  ddat$x[j] <- with(ddat[j,], VideoHeight * (x-VideoXorigin) / VideoHeightOnImage)
-  ddat$y[j] <- with(ddat[j,], VideoWidth * (y-VideoYorigin) / VideoWidthOnImage)
-  ddat
+# A dataframe of the original digitisation data, with x,y values optionally adjusted for image-to-video frame
+# conversion using image metadata (in which case the original x,y values are preserved as x.original,y.original), 
+# plus corresponding data from exifcols columns of exifdat.
+read.digidat <- function(path,
+                        exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
+                        trans.xy=c("none", "img.to.vid", "vid.to.img")){
+  renumber <- function(x){
+    res <- diff(x)
+    res[res!=0] <- 1
+    c(0, cumsum(res))
+  }
+  
+  trans.xy <- match.arg(trans.xy)
+  message("Merging csv files...")
+  files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
+  df.list <- lapply(files, read.csv, stringsAsFactors=FALSE)
+  
+  colnames <- lapply(df.list, names)
+  if(length(unique(unlist(lapply(colnames, length)))) > 1)
+    stop("Not all files have the same number of columns")
+  colnames <- matrix(unlist(colnames), ncol=length(colnames))
+  if(any(apply(colnames, 1, function(x) length(unique(x))) != 1))
+    stop("Not all files have the same column headings")
+  
+  df <- bind_rows(df.list)
+  df$sequence_id_original <- df$sequence_id
+  df$sequence_id <- renumber(df$sequence_id)
+  df$site_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
+  
+  if(!is.null(exifcols) | trans.xy!="none"){
+    message("Reading metadata...")
+    exifdat <- read.exif(path)
+    exifdat <- exifdat[match(df$filename, exifdat$FileName), ]
+    df <- cbind(df, exifdat[, exifcols])
+    rownames(df) <- 1:nrow(df)
+  }
+
+  if(trans.xy!="none"){
+    message("Translating pixels...")
+    if(!"VideoHeight" %in% names(exifdat))
+      stop("No video info found in image metadata - must be there if pixel translation is specified (trans.xy!=\"none\"")
+
+    df$x.original <- df$x
+    df$y.original <- df$y
+    if(trans.xy=="img.to.vid"){
+      j <- exifdat$FileSource!=""
+      df$x[j] <- with(exifdat[j,], VideoHeight * (df$x[j]-VideoXorigin) / VideoHeightOnImage)
+      df$y[j] <- with(exifdat[j,], VideoWidth * (df$y[j]-VideoYorigin) / VideoWidthOnImage)
+    } else{
+      j <- exifdat$FileSource==""
+      df$x[j] <- with(exifdat[j,], VideoXorigin + VideoHeightOnImage*df$x[j] / VideoHeight)
+      df$y[j] <- with(exifdat[j,], VideoYorigin + VideoWidthOnImage*df$y[j] / VideoWidth)
+    }
+  }
+  df
 }
