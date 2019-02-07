@@ -1,9 +1,67 @@
 require(magick)
 require(dplyr)
 
-#######################################################################################################
-#extract.frames
-#######################################################################################################
+
+#GENERAL FUNCTIONS#############################################
+
+
+#read.exif####
+
+#Runs command line ExifTool to extract metadata of all image/video/audio files within a folder
+#For a list of supported formats see https://www.sno.phy.queensu.ca/~phil/exiftool
+#Requires standalone executable exiftool.exe to be present on your computer, available at above link
+#Unzip and rename the exiftool(-k).exe file to exiftool.exe
+
+#INPUT
+# inpath: a character string giving the path of the folder containing files to process
+# outpath: a character string giving the path of the folder in which to place results file (defaults to inpath)
+# toolpath: a character string giving the path of the folder containing exiftool.exe
+# return: should the function return the results as a dataframe
+# write: should the function return the results as a new .csv file within outpath
+# recursive: whether subdirectories of inpath should also be searched for images
+
+#OUTPUT
+#Optionally (depending on return input) a dataframe of metadata. 
+# A csv file of the data called metadata.csv is also temporarily created 
+# (or overwritten without warning) within outpath, and optionally preserved
+# (depending on write input)
+
+read.exif <- function(inpath, outpath=NULL, toolpath="C:/Exiftool", return=TRUE, write=FALSE, recursive=TRUE){
+  wd <- getwd()
+  setwd(toolpath)
+  if(is.null(outpath)) outpath <- inpath
+  outfile <- paste0(outpath, "/metadata.csv")
+  outf <- paste0("\"", outfile, "\"")
+  inpath <- paste0("\"", inpath, "\"")
+  if(recursive==TRUE) sbd<-"-r" else sbd <- ""
+  cmd <- paste("exiftool", sbd, "-csv", inpath, ">", outf)
+  shell(cmd)
+  setwd(wd)
+  res <- read.csv(outfile, stringsAsFactors = FALSE)
+  if(write==FALSE) file.remove(outfile)
+  if(return==TRUE) return(res)
+}
+
+
+#list.files.only####
+
+#Wrapper for list.files that over-rides include.dirs argument to return only file names
+list.files.only <- function(dir, ...){
+  args <- c(path=dir, list(...))
+  if("full.names" %in% names(args)) fn <- TRUE else fn <- FALSE
+  if(fn) args$full.names <- TRUE else args <- c(args, full.names=TRUE)
+  fls <-  do.call(list.files, args)
+  res <- fls[!file.info(fls)$isdir]
+  if(!fn) res <- basename(res)
+  res
+}
+
+
+#VIDEO PROCESSING FUNCTIONS#############################################
+
+
+#extract.frames####
+
 #Extracts frames at a given frame rate from video files, and optionally adds a timestamp to the
 #metadata, reconstructed from original video time stamp and frame position.
 #
@@ -84,9 +142,9 @@ extract.frames <- function(fps, inpath=NULL, outpath="frames", filetypes=c("MP4"
   }
 }
 
-#######################################################################################################
-#get.min.metadate
-#######################################################################################################
+
+#get.min.metadate####
+
 #Returns the minimum dates in each row of an exif dataframe containing character format
 #date-times with ":" separators
 
@@ -105,9 +163,8 @@ get.min.metadate <- function(exf){
   strptime(apply(exf[,j], 1, f), "%Y:%m:%d %H:%M:%S", tz="UTC")
 }  
 
-#######################################################################################################
-#extract
-#######################################################################################################
+#extract####
+
 #Extracts frames from a single video file
 #INPUT
 # fps: frame rate for extraction (frames per second)
@@ -116,7 +173,6 @@ get.min.metadate <- function(exf){
 # toolpath: a character string giving the path of the folder containing the ffmpeg executable
 # suffix.length: the number of characters to add to the frame files as suffix to the video file name.
 #                By default enerates a sequence -001, -002, ...
-
 extract <- function(fps, file, outpath, toolpath="C:/FFmpeg/bin", suffix.length=2){
   wd <- getwd()
   setwd(toolpath)
@@ -128,9 +184,9 @@ extract <- function(fps, file, outpath, toolpath="C:/FFmpeg/bin", suffix.length=
   setwd(wd)
 }
 
-#######################################################################################################
-#stamptime
-#######################################################################################################
+
+#stamptime####
+
 #Adds a time stamp to images extracted from video. Calculates stamp values from video start
 #time and the frame rate used for extraction. Function requires .ExifTool_config file to be
 #placed in the ExifTool folder to define bespoke metadata fields.
@@ -184,9 +240,9 @@ stamptime <- function(fps, path, vexf, toolpath="C:/Exiftool", offset=0, recursi
   setwd(wd)
 }
 
-#######################################################################################################
-#copy.images
-#######################################################################################################
+
+#copy.images####
+
 #Copies all image (JPEG) files in inpath to outpath, for use when each camera trap trigger resulted
 #in an image immediately followed by a video. Optionally crops the resulting images to give the same 
 #field of view as the equivalent video frames; if not cropped, cropping information is instead
@@ -259,9 +315,9 @@ copy.images <- function(inpath, outpath, exf=NULL, vidtypes=c("MP4", "AVI"), too
   }
 }
 
-#######################################################################################################
-#crop
-#######################################################################################################
+
+#crop####
+
 #Creates a cropped copy of image (JPEG) files to conform to the field of view of video frames from
 #the same camera setting.
 
@@ -315,9 +371,9 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
     image_write(imgs[i], paste0(outpath, "/", gsub("\\.", suffix, basename(images)[i])))
 }
 
-#######################################################################################################
-#read.exif
-#######################################################################################################
+
+#read.exif####
+
 #Runs command line ExifTool to extract metadata of all image/video/audio files within a folder
 #For a list of supported formats see https://www.sno.phy.queensu.ca/~phil/exiftool
 #Requires standalone executable exiftool.exe to be present on your computer, available at above link
@@ -353,9 +409,9 @@ read.exif <- function(inpath, outpath=NULL, toolpath="C:/Exiftool", return=TRUE,
   if(return==TRUE) return(res)
 }
 
-#######################################################################################################
-#list.files.only
-#######################################################################################################
+
+#list.files.only####
+
 #Wrapper for list.files that over-rides include.dirs argument to return only file names
 list.files.only <- function(dir, ...){
   args <- c(path=dir, list(...))
@@ -367,9 +423,12 @@ list.files.only <- function(dir, ...){
   res
 }
 
-#######################################################################################################
-#split.annotations
-#######################################################################################################
+
+#DATA PREP FUNCTIONS#############################################
+
+
+#split.annotations####
+
 #
 split.annotations <- function(dat, colnames=NULL, sep=";"){
   lst <- strsplit(dat, ";")
@@ -387,9 +446,9 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
   d
 }
 
-#######################################################################################################
-#read.digidat
-#######################################################################################################
+
+#read.digidat####
+
 #Reads and merges csv files of digitisation data from animaltracker tool.
 
 #- Input path should point to a directory containing the digisation data csv files, and if EITHER
@@ -464,9 +523,9 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
   df
 }
 
-#######################################################################################################
-#decimal.time
-#######################################################################################################
+
+#decimal.time####
+
 #Converts text time data to decimal time of day. Default format hh:mm:ss, but can handle 
 #other separators and minutes and seconds can be missing.
 decimal.time <- function(dat, sep=":"){
@@ -480,9 +539,9 @@ decimal.time <- function(dat, sep=":"){
   unlist(lapply(tt, f))
 }
 
-#######################################################################################################
-#make.poledat
-#######################################################################################################
+
+#make.poledat####
+
 #Reads pole digitisation data for either camera or site calibration
 #INPUT
 # file: character string giving name of tracker output csv file to read (including path if not in working directory)
@@ -567,9 +626,12 @@ make.poledat <- function(dat){
   res
 }
 
-#######################################################################################################
-#cal.cam
-#######################################################################################################
+
+#CALIBRATION FUNCTIONS#############################################
+
+
+#cal.cam####
+
 #Creates a camera calibration model
 
 #INPUT
@@ -618,9 +680,9 @@ cal.cam <- function(poledat){
   out
 }
 
-#######################################################################################################
-#plot.camcal
-#######################################################################################################
+
+#plot.camcal####
+
 #Show diagnostic plots for camera calibration model
 plot.camcal <- function(mod){
   dat <- mod$data
@@ -648,9 +710,9 @@ plot.camcal <- function(mod){
   lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
 }
 
-#######################################################################################################
-#cal.site
-#######################################################################################################
+
+#cal.site####
+
 
 cal.site <- function(cmod, dat, lookup){
   cal <- function(cmod, dat){
@@ -688,28 +750,9 @@ cal.site <- function(cmod, dat, lookup){
 }
 
 
-#######################################################################################################
-#predict.r
-#######################################################################################################
-#Predict radial distance from camera given pixel positions
 
-#INPUT
-# mod: a sitecal objext (site calibration model, produced using cal.site(...))
-# relx: x pixel position relative to the centre line
-# rely: y pixel position relative to the top edge
+#plot.sitecal####
 
-#OUTPUT
-#A vector numeric radii.
-#Note, units depend on the units of pole height above ground used to calibrate the site model
-predict.r <- function(mod, relx, rely){
-  res <- predict(mod, newdata=data.frame(relx=relx, rely=rely))
-  res[res<0] <- Inf
-  res
-}
-
-#######################################################################################################
-#plot.sitecal
-#######################################################################################################
 #Show diagnostic plots for site calibration model
 plot.sitecal <- function(mod){
   dim <- as.list(apply(smod$OCGSV09$site.model$data[,c("xdim","ydim")],2,unique))
@@ -742,9 +785,31 @@ plot.sitecal <- function(mod){
   }
 }
 
-#######################################################################################################
-#predict.pos
-#######################################################################################################
+
+#DATA SUMMARY FUNCTIONS#############################################
+
+
+#predict.r####
+
+#Predict radial distance from camera given pixel positions
+
+#INPUT
+# mod: a sitecal objext (site calibration model, produced using cal.site(...))
+# relx: x pixel position relative to the centre line
+# rely: y pixel position relative to the top edge
+
+#OUTPUT
+#A vector numeric radii.
+#Note, units depend on the units of pole height above ground used to calibrate the site model
+predict.r <- function(mod, relx, rely){
+  res <- predict(mod, newdata=data.frame(relx=relx, rely=rely))
+  res[res<0] <- Inf
+  res
+}
+
+
+#predict.pos####
+
 #Predicts position relative to camera given image pixel positions and site calibration models 
 #INPUT
 # file: text string giving name of tracker file containing data to process 
@@ -790,13 +855,9 @@ predict.pos <- function(file, mod, fields, sep=";"){
   res <- as.data.frame(rbindlist(res))
 }
 
-############################################################
-#Data summary Functions
-############################################################
 
-#######################################################################################################
-#seq.data
-#######################################################################################################
+#seq.data####
+
 #Dataframe of image-to-image changes for each row in dat
 
 #INPUT
@@ -822,9 +883,9 @@ seq.data <- function(dat){
   cbind(dat, imgcount=imgcount, pixdiff=pixdiff, displacement=c(NA,displacement), d.angle=d.angle)
 }
 
-#######################################################################################################
-#seq.summary
-#######################################################################################################
+
+#seq.summary####
+
 #Summarise sequences
 
 #INPUT
