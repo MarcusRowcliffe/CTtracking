@@ -727,13 +727,13 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL){
 
 #Show diagnostic plots for site calibration model
 plot.sitecal <- function(mod){
-  dim <- as.list(apply(smod$OCGSV09$site.model$data[,c("xdim","ydim")],2,unique))
+  dim <- as.list(apply(mod$site.model$data[,c("xdim","ydim")],2,unique))
   dat <- mod$site.model$data
   colrange <- grey.colors(11, start=0, end=0.8)
   
   #PLOT DISTANCE V Y-PIXEL RELATIONSHIP
   cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
-  with(dat, plot(rely, r, col=cols, pch=16, xlim=c(0,1.5), ylim=c(0, 1.5*max(r)),
+  with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,1.5), ylim=c(0, 1.5*max(distance)),
                  xlab="Relative y pixel position", ylab="Distance from camera",
                  main=unique(dat$site_id), 
                  sub="Shading from image left (dark) to right edge", cex.sub=0.7))
@@ -745,18 +745,20 @@ plot.sitecal <- function(mod){
   }
   
   #PLOT POLE IMAGE
-  plot(c(min(c(dat$xg, 0)), max(c(dat$xg, dim$xdim))),
-       -c(min(c(dat$yg, 0)), max(c(dat$yg, dim$ydim))), 
+  relht <- with(dat, (1-ht) / (ht-hb))
+  xl <- with(dat, xt + relht*(xt-xb))
+  yl <- with(dat, yt + relht*(yt-yb))
+  plot(c(0, dim$xdim), -c(0, dim$ydim), 
        asp=1, xlab="x pixel", ylab="y pixel", type="n", 
        main=unique(dat$site_id), sub="Shading from near camera (dark) to far", cex.sub=0.7)
   lines(c(0,rep(c(dim$xdim,0),each=2)), c(rep(c(0,-dim$ydim),each=2),0), lty=2)
-  cols <- with(dat, colrange[1+round(10*((r-min(r))/diff(range(r))))])
+  cols <- with(dat, colrange[1+round(10*((distance-min(distance))/diff(range(distance))))])
   for(i in 1:nrow(mod$site.model$data)){
-    with(dat, lines(c(xg[i],xt[i]), -c(yg[i],yt[i]), col=cols[i], lwd=2))
-    with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7))
+    with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), col=cols[i], lwd=2))
+    with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
   }
 }
-
+View(smods[[2]]$site.model$data)
 
 #DATA SUMMARY FUNCTIONS#############################################
 
