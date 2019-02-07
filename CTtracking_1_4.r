@@ -1,6 +1,8 @@
 require(magick)
 require(dplyr)
 
+setClass("camcal", representation("list"))
+setClass("sitecal", representation("list"))
 
 #GENERAL FUNCTIONS#############################################
 
@@ -372,58 +374,6 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 }
 
 
-#read.exif####
-
-#Runs command line ExifTool to extract metadata of all image/video/audio files within a folder
-#For a list of supported formats see https://www.sno.phy.queensu.ca/~phil/exiftool
-#Requires standalone executable exiftool.exe to be present on your computer, available at above link
-#Unzip and rename the exiftool(-k).exe file to exiftool.exe
-
-#INPUT
-# inpath: a character string giving the path of the folder containing files to process
-# outpath: a character string giving the path of the folder in which to place results file (defaults to inpath)
-# toolpath: a character string giving the path of the folder containing exiftool.exe
-# return: should the function return the results as a dataframe
-# write: should the function return the results as a new .csv file within outpath
-# recursive: whether subdirectories of inpath should also be searched for images
-
-#OUTPUT
-#Optionally (depending on return input) a dataframe of metadata. 
-# A csv file of the data called metadata.csv is also temporarily created 
-# (or overwritten without warning) within outpath, and optionally preserved
-# (depending on write input)
-
-read.exif <- function(inpath, outpath=NULL, toolpath="C:/Exiftool", return=TRUE, write=FALSE, recursive=TRUE){
-  wd <- getwd()
-  setwd(toolpath)
-  if(is.null(outpath)) outpath <- inpath
-  outfile <- paste0(outpath, "/metadata.csv")
-  outf <- paste0("\"", outfile, "\"")
-  inpath <- paste0("\"", inpath, "\"")
-  if(recursive==TRUE) sbd<-"-r" else sbd <- ""
-  cmd <- paste("exiftool", sbd, "-csv", inpath, ">", outf)
-  shell(cmd)
-  setwd(wd)
-  res <- read.csv(outfile, stringsAsFactors = FALSE)
-  if(write==FALSE) file.remove(outfile)
-  if(return==TRUE) return(res)
-}
-
-
-#list.files.only####
-
-#Wrapper for list.files that over-rides include.dirs argument to return only file names
-list.files.only <- function(dir, ...){
-  args <- c(path=dir, list(...))
-  if("full.names" %in% names(args)) fn <- TRUE else fn <- FALSE
-  if(fn) args$full.names <- TRUE else args <- c(args, full.names=TRUE)
-  fls <-  do.call(list.files, args)
-  res <- fls[!file.info(fls)$isdir]
-  if(!fn) res <- basename(res)
-  res
-}
-
-
 #DATA PREP FUNCTIONS#############################################
 
 
@@ -478,7 +428,6 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
-  
   trans.xy <- match.arg(trans.xy)
 
   files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
@@ -504,7 +453,10 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
     rownames(df) <- 1:nrow(df)
   }
 
-  if(trans.xy!="none"){
+  if(trans.xy=="none"){
+    df$xdim <- exifdat$ImageWidth
+    df$ydim <- exifdat$ImageHeight
+  } else{
     if(!"VideoHeight" %in% names(exifdat))
       stop("No video info found in image metadata - must be there if pixel translation is specified (trans.xy!=\"none\"")
 
@@ -514,10 +466,14 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
       j <- exifdat$FileSource!=""
       df$x[j] <- with(exifdat[j,], VideoHeight * (df$x[j]-VideoXorigin) / VideoHeightOnImage)
       df$y[j] <- with(exifdat[j,], VideoWidth * (df$y[j]-VideoYorigin) / VideoWidthOnImage)
+      df$xdim <- exifdat$VideoWidth
+      df$ydim <- exifdat$VideoHeight
     } else{
       j <- exifdat$FileSource==""
       df$x[j] <- with(exifdat[j,], VideoXorigin + VideoHeightOnImage*df$x[j] / VideoHeight)
       df$y[j] <- with(exifdat[j,], VideoYorigin + VideoWidthOnImage*df$y[j] / VideoWidth)
+      df$xdim <- unique(exifdat[!j,]$ImageWidth)
+      df$ydim <- unique(exifdat[!j,]$ImageHeight)
     }
   }
   df
@@ -558,8 +514,18 @@ decimal.time <- function(dat, sep=":"){
 #Returns the input data minus x, y and sequence_annotation, plus columns:
 # xb, yb, xt, yt: x and y co-ordinates of pole b(ases) and t(ops)
 #Records are discarded if they have non-numeric distance, length or height values
-
 make.poledat <- function(dat){
+
+  flatten <- function(dat){
+    dat <- dat[order(dat$pole_id, dat$y), ]
+    j <- 2*(1:(nrow(dat)/2))
+    xy <- cbind(dat[j, c("x","y")], dat[j-1, c("x","y")])
+    names(xy) <- c("xb","yb","xt","yt")
+    if("height" %in% names(dat))
+      xy <- cbind(xy, hb=dat$height[j], ht=dat$height[j-1])
+    dat <- cbind(dat[j,], xy)
+    dat[, !names(dat) %in%  c("x","y","height")]
+  }
 
   if("height" %in% names(dat)){
     dat$height <- suppressWarnings(as.numeric(as.character(dat$height)))
@@ -590,7 +556,7 @@ make.poledat <- function(dat){
     warning(paste("Some poles digitised once at height >0 or  digitised >twice and were removed:", 
                   paste(names(which(duff)), collapse=" ")))
   }
-  if("distance" %in% names(data)){
+  if("distance" %in% names(dat)){
     duff <- with(dat, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
     if(any(duff))
       stop(paste("Some poles did not have matching distance for top and base:",
@@ -599,22 +565,21 @@ make.poledat <- function(dat){
   
   tab <- table(dat$pole_id)
   i <- dat$pole_id %in% names(tab)[tab==1]
+  res <- flatten(dat[!i, ])  
   solos <- dat[i, ]
-  dat <- dat[!i, ]
-  dat <- dat[order(dat$pole_id, dat$y), ]
-  i <- 2*(1:(nrow(dat)/2))
-  xy <- cbind(dat[i, c("x","y")], dat[i-1, c("x","y")])
-  xy <- rbind(xy, cbind(x=solos$x, y=solos$y, x=NA, y=NA))
-  names(xy) <- c("xb","yb","xt","yt")
-  if("height" %in% names(dat)){
-    h <- cbind(hb=dat$height[i], ht=dat$height[i-1])
-    h <- rbind(h, cbind(hb=solos$height, ht=NA))
-    xy <- cbind(xy, h)
+  if(nrow(solos)>0 & "distance" %in% names (dat)){
+    pxratio <- with(res,  sqrt((xb-xt)^2+(yb-yt)^2) / (ht-hb))
+    invd <- 1/res$distance
+    relx2 <- (res$xb / res$ImageWidth - 0.5)^2
+    mod <- lm(pxratio~invd+relx2-1, data=dat)
+    nd <- data.frame(invd=1/solos$distance, relx2=(solos$x/solos$ImageWidth-0.5)^2)
+    solos2 <- solos
+    solos2$height <- 1
+    solos2$y <- solos$y-predict(mod, newdata=nd)
+    res <- rbind(res, flatten(rbind(solos,solos2)))
   }
-  res <- rbind(dat[i, ], solos)[, !(names(dat) %in% c("height","x","y"))]
-  res <- cbind(res, xy)
   res <- res[order(res$pole_id), ]
-  
+
   if("height" %in% names(dat)){
     duff <- res$hb>=res$ht
     if(any(duff, na.rm=TRUE)){
@@ -714,11 +679,13 @@ plot.camcal <- function(mod){
 #cal.site####
 
 
-cal.site <- function(cmod, dat, lookup){
+cal.site <- function(dat, cmod=NULL, lookup){
+
   cal <- function(cmod, dat){
     dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
     if(length(unlist(dim))>2) stop("There is more than one unique value per site for xdim and/or ydim in dat")
     names(dim) <- c("x","y")
+    
     xdiff <- (dat$xt-dat$xb)
     ydiff <- (dat$yt-dat$yb)
     dat$pixlen <- sqrt(xdiff^2 + ydiff^2)
@@ -726,15 +693,16 @@ cal.site <- function(cmod, dat, lookup){
     dat$yg <- with(dat, yb - ydiff*hb/(ht-hb))
     dat$rely <- dat$yg/dim$y
     dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
-    FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
-    dat$r <- FSratio * (dat$ht-dat$hb) * dim$y/dat$pixlen
-    mod <- try(nls(r~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
-                   start=list(b1=min(dat$r)/2, b2=min(dat$rely)*0.9, b3=0),
+    if(!is.null(cmod)){
+      FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
+      dat$distance <- FSratio * (dat$ht-dat$hb) * dim$y/dat$pixlen
+    }
+    mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
+                   start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0),
                    lower=c(b1=0,b2=0,b3=-Inf), 
                    upper=c(b1=Inf,b2=min(dat$rely),b3=Inf),
-                   trace=F
-    )
-    )
+                   trace=F ))
+    
     res <- list(cam.model=cmod, site.model=list(model=mod, data=dat, dim=dim))
     class(res) <- "sitecal"
     res
