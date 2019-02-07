@@ -679,9 +679,9 @@ plot.camcal <- function(mod){
 #cal.site####
 
 
-cal.site <- function(dat, cmod=NULL, lookup){
+cal.site <- function(dat, cmod=NULL, lookup=NULL){
 
-  cal <- function(cmod, dat){
+  cal <- function(dat, cmod=NULL){
     dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
     if(length(unlist(dim))>2) stop("There is more than one unique value per site for xdim and/or ydim in dat")
     names(dim) <- c("x","y")
@@ -709,14 +709,18 @@ cal.site <- function(dat, cmod=NULL, lookup){
   }
   
   sites <- unique(dat$site_id)
-  if(!all(sites %in% lookup$site_id)) stop("Not all dat$site_id values have a matching value in lookup$site_id")
-  if(any(!lookup$cam_id[match(sites, lookup$site_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
-  out <- lapply(sites, function(s) 
-    cal(cmod[[lookup$cam_id[match(s, lookup$site_id)]]], subset(dat, site_id==s)))
+  if(is.null(cmod)){
+    out <- lapply(sites, function(s) cal(subset(dat, site_id==s)))
+    } else{
+      if(is.null(lookup)) stop("Site-camera lookup table must be provided if camera models are specified")
+      if(!all(sites %in% lookup$site_id)) stop("Not all dat$site_id values have a matching value in lookup$site_id")
+      if(any(!lookup$cam_id[match(sites, lookup$site_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
+      out <- lapply(sites, function(s)
+        cal(subset(dat, site_id==s), cmod[[lookup$cam_id[match(s, lookup$site_id)]]]))
+    }
   names(out) <- sites
   out
 }
-
 
 
 #plot.sitecal####
