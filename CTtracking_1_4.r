@@ -516,34 +516,46 @@ make.poledat <- function(dat){
   }
   
   if(!"pole_id" %in% names(dat))
-    dat$pole_id <- paste(dat$directory, dat$frame_number, sep="_") else
-      dat$pole_id <- dat$frame_number
+    if("Directory" %in% names(dat))
+      dat$pole_id <- paste(dat$Directory, dat$frame_number, sep="_") else
+        dat$pole_id <- dat$frame_number
   
   tab <- table(dat$pole_id)
-  duff <- !tab==2
+  i <- dat$pole_id %in% names(tab)[tab==1]
+  duff <- any(dat[i,]$height>0) | tab>2
   if(any(duff)){
     dat <- droplevels(dat[!dat$pole_id %in% names(which(duff)), ])
-    warning(paste("Some poles did not have exactly 2 points digitised and were removed:", 
+    warning(paste("Some poles digitised once at height >0 or  digitised >twice and were removed:", 
                   paste(names(which(duff)), collapse=" ")))
   }
-  if("distance" %in% col.names){
+  if("distance" %in% names(data)){
     duff <- with(dat, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
     if(any(duff))
       stop(paste("Some poles did not have matching distance for top and base:",
                  paste(names(which(duff)), collapse=" ")))
   }
   
+  tab <- table(dat$pole_id)
+  i <- dat$pole_id %in% names(tab)[tab==1]
+  solos <- dat[i, ]
+  dat <- dat[!i, ]
   dat <- dat[order(dat$pole_id, dat$y), ]
   i <- 2*(1:(nrow(dat)/2))
   xy <- cbind(dat[i, c("x","y")], dat[i-1, c("x","y")])
+  xy <- rbind(xy, cbind(x=solos$x, y=solos$y, x=NA, y=NA))
   names(xy) <- c("xb","yb","xt","yt")
-  if("height" %in% col.names)
-    xy <- cbind(xy, hb=dat$height[i], ht=dat$height[i-1])
-  res <- cbind(dat[i, !(names(dat) %in% c("height","x","y"))], xy)
+  if("height" %in% names(dat)){
+    h <- cbind(hb=dat$height[i], ht=dat$height[i-1])
+    h <- rbind(h, cbind(hb=solos$height, ht=NA))
+    xy <- cbind(xy, h)
+  }
+  res <- rbind(dat[i, ], solos)[, !(names(dat) %in% c("height","x","y"))]
+  res <- cbind(res, xy)
+  res <- res[order(res$pole_id), ]
   
-  if("height" %in% col.names){
+  if("height" %in% names(dat)){
     duff <- res$hb>=res$ht
-    if(any(duff)){
+    if(any(duff, na.rm=TRUE)){
       warning(paste("Some poles had base height >= top height and were removed:", 
                     paste(res$pole_id[duff], collapse=" ")))
       res <- droplevels(res[!duff, ])
