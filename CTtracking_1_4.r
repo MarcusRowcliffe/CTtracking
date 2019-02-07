@@ -507,11 +507,11 @@ make.poledat <- function(dat){
     dat <- subset(dat, !is.na(height))
   }
   if("distance" %in% names(dat)){
-    dat$height <- suppressWarnings(as.numeric(as.character(dat$distance)))
+    dat$distance <- suppressWarnings(as.numeric(as.character(dat$distance)))
     dat <- subset(dat, !is.na(distance))
   }
   if("length" %in% names(dat)){
-    dat$height <- suppressWarnings(as.numeric(as.character(dat$length)))
+    dat$length <- suppressWarnings(as.numeric(as.character(dat$length)))
     dat <- subset(dat, !is.na(length))
   }
   
@@ -521,8 +521,11 @@ make.poledat <- function(dat){
         dat$pole_id <- dat$frame_number
   
   tab <- table(dat$pole_id)
-  i <- dat$pole_id %in% names(tab)[tab==1]
-  duff <- any(dat[i,]$height>0) | tab>2
+  if("height" %in% names(dat)){
+    mnh <- tapply(dat$height, dat$pole_id, min)
+    duff <- (tab==1 & mnh>0) | tab>2
+  } else
+    duff <- tab>2
   if(any(duff)){
     dat <- droplevels(dat[!dat$pole_id %in% names(which(duff)), ])
     warning(paste("Some poles digitised once at height >0 or  digitised >twice and were removed:", 
