@@ -450,6 +450,7 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
     if(is.null(exifdat)) exifdat <- read.exif(path)
     exifdat <- exifdat[match(df$filename, exifdat$FileName), ]
     df <- cbind(df, exifdat[, exifcols])
+    if("CreateDate" %in% names(df)) df$TimeOfDay <- decimal.time(df$CreateDate)
     rownames(df) <- 1:nrow(df)
   }
 
@@ -491,6 +492,9 @@ decimal.time <- function(dat, sep=":"){
     if(length(x)>2) res <- res+as.numeric(x[3])/60^2
     res/24
   }
+  spaces <- unique(grepl(" " , dat))
+  if(length(spaces)!=1) stop("Time formats don't seem to be consistent")
+  if(spaces) dat <- unlist(lapply(strsplit(dat, " "), function(x) x[2]))
   tt <- strsplit(as.character(dat), sep)
   unlist(lapply(tt, f))
 }
@@ -696,6 +700,10 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL){
     if(!is.null(cmod)){
       FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
       dat$distance <- FSratio * (dat$ht-dat$hb) * dim$y/dat$pixlen
+    } else{
+      poledat <- data.frame(dat[, c("distance", "xt","yt","xb","yb","xdim","ydim")])
+      poledat$length <- dat$ht-dat$hb
+      cmod <- cal.cam(poledat)
     }
     mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
                    start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0),
@@ -788,45 +796,30 @@ predict.r <- function(mod, relx, rely){
 #INPUT
 # file: text string giving name of tracker file containing data to process 
 # mod: named list of site calibration models; names must be matched by site_id column in file
-# fields: column headings for the sequence_annotation field, given as single text string with values separated by sep
-#         Must contain at least "species"
-# sep: single character separating the column names in fields
 #OUTPUT
 #dataframe of original data with radial and angular distances from camera appended
-predict.pos <- function(file, mod, fields, sep=";"){
-  dat <- read.csv(file, stringsAsFactors=FALSE)
-  
+predict.pos <- function(dat, mod){
+
   required <- c("x","y","xdim","ydim","site_id","sequence_annotation","sequence_id")
   if(!all(required %in% names(dat))) 
     stop(paste("dat must contain all of these columns:", paste(required, collapse=" ")))
-  
-  col.names <- unlist(strsplit(fields, sep))
-  if(gregexpr(sep,fields)[[1]][1]==-1) notes <- dat$sequence_annotation else
-    notes <- strsplit(dat$sequence_annotation, sep)
-  
-  if(any(unlist(lapply(notes, length))!=length(col.names)))
-    stop(paste("fields gives", length(col.names), "headings but some annotations do not have this many entries"))
-  
-  notes <- matrix(unlist(notes), nrow=nrow(dat), byrow=T, dimnames=list(NULL, col.names))
-  dat2 <- cbind(matrix.data.frame(notes), subset(dat, select=-c(sequence_annotation)))
-  dat2 <- subset(dat2, is.na(suppressWarnings(as.numeric(as.character(dat2$species)))))
-  
-  sites <- unique(dat2$site_id)
+
+  sites <- unique(dat$site_id)
   if(!any(sites %in% names(mod))) stop("Not all records have a matching site calibration model")
-  
-  xdimvals <- with(dat2, tapply(xdim, site_id, unique))
-  ydimvals <- with(dat2, tapply(ydim, site_id, unique))
+
+  xdimvals <- with(dat, tapply(xdim, site_id, unique))
+  ydimvals <- with(dat, tapply(ydim, site_id, unique))
   if(length(unlist(xdimvals))>length(sites) | length(unlist(ydimvals))>length(sites)) 
-    warning(paste("There is more than one unique value per site for xdim and/or ydim in", file))
-  
+    warning(paste("There is more than one unique value per site for xdim and/or ydim in dat"))
+
   res <- lapply(sites, function(s){
-    dt <- subset(dat2, site_id==s)
+    dt <- subset(dat, site_id==s)
     cm <- mod[[s]]$cam.model
     sm <- mod[[s]]$site.model$model
     data.frame(dt, radius=predict.r(sm, dt$x/dt$xdim-0.5, dt$y/dt$ydim),
-               angle=cm$APratio * (dt$x/dt$xdim-0.5))
+               angle=cm[[1]]$APratio * (dt$x/dt$xdim-0.5))
   })
-  res <- as.data.frame(rbindlist(res))
+  res <- bind_rows(res)
 }
 
 
@@ -878,14 +871,16 @@ seq.data <- function(dat){
 #   time: time taken (diff[range{frame.number}]*interval)
 #   speed: travel speed (dist/time)
 #   frames: number of frames digitised
-seq.summary <- function(dat, interval){
+seq.summary <- function(dat){
   calc.mov <- function(dat){
     n <- as.numeric(table(dat$sequence_id))
-    dat2 <- seq.data(dat)
-    pixdiff <- with(dat2, tapply(pixdiff, sequence_id, sum, na.rm=T) )
-    mvdist <- with(dat2, tapply(displacement, sequence_id, sum, na.rm=T) )
-    mvtime <- unlist(lapply(tapply(dat$frame_number, dat$sequence_id, range), diff)) * interval
-    cbind(dat2[dat2$imgcount==1, !(names(dat2) %in% c("imgcount","pixdiff","displacement","d.angle"))],
+    dat <- seq.data(dat)
+    pixdiff <- with(dat, tapply(pixdiff, sequence_id, sum, na.rm=T) )
+    mvdist <- with(dat, tapply(displacement, sequence_id, sum, na.rm=T) )
+    
+    tm <- strptime(dat$CreateDate, format="%Y:%m:%d %H:%M:%S", tz="UTC")
+    mvtime <- tapply(tm, dat$sequence_id, function(x) as.numeric(diff(range(x)), units="secs"))
+    cbind(dat[dat$imgcount==1, !(names(dat) %in% c("imgcount","pixdiff","displacement","d.angle"))],
           pixdiff=pixdiff,
           dist=mvdist,
           time=mvtime,
@@ -898,4 +893,3 @@ seq.summary <- function(dat, interval){
   i <- dat$sequence_id %in% names(n)[n==1]
   list(trigdat=subset(dat, i), movdat=calc.mov(subset(dat, !i)))
 }
-
