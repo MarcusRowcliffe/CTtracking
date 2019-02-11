@@ -48,8 +48,11 @@ read.exif <- function(inpath, outpath=NULL, toolpath="C:/Exiftool", return=TRUE,
 #list.files.only####
 
 #Wrapper for list.files that over-rides include.dirs argument to return only file names
-list.files.only <- function(dir, ...){
-  args <- c(path=dir, list(...))
+
+#INPUT and OUTPUT
+# As for list.files (... passes additional arguments to list.files)
+list.files.only <- function(path, ...){
+  args <- c(path=path, list(...))
   if("full.names" %in% names(args)) fn <- TRUE else fn <- FALSE
   if(fn) args$full.names <- TRUE else args <- c(args, full.names=TRUE)
   fls <-  do.call(list.files, args)
@@ -105,7 +108,8 @@ list.files.only <- function(dir, ...){
 #      (eg image versus video resolution, see below; used if copy==TRUE)
 
 #OUTPUT
-# None: creates a set of image files, extracted from video files in inpath, mirroring the original directory structure.
+# None: creates a set of image files, extracted from video files in inpath, mirroring the original 
+#       directory structure.
 
 extract.frames <- function(fps, inpath=NULL, outpath="frames", filetypes=c("MP4", "AVI"),
                               fpath="C:/ffmpeg/bin", epath="C:/exiftool",
@@ -173,8 +177,11 @@ get.min.metadate <- function(exf){
 # file: a character string giving the name of the file to extract from, including path
 # outpath: a character string giving the path in which to place extracted images;
 # toolpath: a character string giving the path of the folder containing the ffmpeg executable
-# suffix.length: the number of characters to add to the frame files as suffix to the video file name.
-#                By default enerates a sequence -001, -002, ...
+# suffix.length: the number of leading zeroes to add to the frame files as suffix to the 
+#                video file name. By default generates a sequence -001, -002, ...
+#OUTPUT
+# None: creates a set of image files extracted from file in outpath.
+
 extract <- function(fps, file, outpath, toolpath="C:/FFmpeg/bin", suffix.length=2){
   wd <- getwd()
   setwd(toolpath)
@@ -337,7 +344,7 @@ copy.images <- function(inpath, outpath, exf=NULL, vidtypes=c("MP4", "AVI"), too
 
 
 #OUTPUT
-# Cropped file copies.
+# None. Creates cropped file copies in outpath.
 
 crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
   if(!dir.exists(outpath)) dir.create(outpath)
@@ -379,7 +386,18 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 
 #split.annotations####
 
-#
+#Splits out multi-field annotations entered as a single field
+
+#INPUT
+# dat: a vector of data containing multiple field separated by a given character, sep
+# colnames: a vector of the names to assign to output columns
+# sep: the character defining field breaks within dat
+
+#OUTPUT
+# A dataframe with one column per field from the input data. The function fails if not all 
+# entries in dat have the same number of sep characters (implying different numbers of columns),
+# or if the number of colnames doesn't equal the number of columns in dat.
+
 split.annotations <- function(dat, colnames=NULL, sep=";"){
   lst <- strsplit(dat, ";")
   seps <- unique(unlist(lapply(lst, length)))
@@ -401,29 +419,34 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 
 #Reads and merges csv files of digitisation data from animaltracker tool.
 
-#- Input path should point to a directory containing the digisation data csv files, and if EITHER
-#  pixel translation OR exifcols are specified, the digitised images.
-#- The root directory must contain ONLY those csv files to be processed.
+#- Input path should point to a directory containing the digisation data csv files in its root.
+#- The root path must contain ONLY those csv files to be processed.
 #- The csv file names are assumed to be site IDs.
-#- Optionally adds metadata from the original images. 
-#- In cases where images are a mix of image and video frame, also optionally translates x,y pixel
-#  positions from image to video scale or vice versa.
-#- IMPORTANT: where image metadata are accessed, all images in the path must have unique names
+#- The function Optionally adds metadata from the original images. 
+#- In cases where images are a mix of image and video frame, the function also optionally
+#  translates x,y pixel positions from image to video scale or vice versa.
+#- If EITHER pixel translation OR exifcols are specified (ie trans.xy is not "none" OR exifcols is
+#  not NULL) image exif data are needed from the digitised images. In this case, EITHER exifdat must
+#  be provided, OR the necessary images must be present within (sub-directories of) path and the
+#  function will read exif data from there.
+#- IMPORTANT: where image metadata are accessed, all images must have unique names.
 
 #INPUT
-# path: name of directory containing all required files (see above)
-# exifcols: data columns from image metadata to add to the merged dataframe
+# path: name of directory containing all required files (see above).
+# exifcols: data columns from image metadata to add to the merged dataframe; specify NULL to suppress.
 # trans.xy: type of pixel translation to apply, with options:
 #   "none": no translation
 #   "img.to.vid": all image file pixel positions are translated to the video scale
 #   "vid.to.img": all video file pixel positions are translated to the image scale
 
 #OUTPUT
-# A dataframe of the original digitisation data, with sequence_id column reassigned to give unique values
-# to each sequence across the whole dataframe (with original IDs preserved as sequence_id_original), plus
-# new column site_id holding values taken from input csv file names. Optionally, x,y values are translated from
-# image to video scale or vice versa, with original x,y values are preserved x.original,y.original. Also
-# optionally, columns specified by exifcols input are added from the image metadata.
+# A dataframe of the original digitisation data, with sequence_id column reassigned to give
+# unique values to each sequence across the whole dataframe (with original IDs preserved as
+# sequence_id_original), plus new column site_id holding values taken from input csv file names.
+# Optionally, x,y values are translated from image to video scale or vice versa, with original
+# x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
+# input are added from the image metadata.
+
 read.digidat <- function(path, exifdat=NULL, annotations=NULL,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
@@ -485,6 +508,14 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
 
 #Converts text time data to decimal time of day. Default format hh:mm:ss, but can handle 
 #other separators and minutes and seconds can be missing.
+
+#INPUT
+# dat: an array of character times, with hours, minutes and seconds in that order separated by sep.
+# sep: the character used to separate time components.
+
+#OUTPUT
+# An array of decimal times in hours.
+
 decimal.time <- function(dat, sep=":"){
   f <- function(x){
     res <- as.numeric(x[1])
@@ -502,10 +533,7 @@ decimal.time <- function(dat, sep=":"){
 
 #make.poledat####
 
-#Reads pole digitisation data for either camera or site calibration
-#INPUT
-# file: character string giving name of tracker output csv file to read (including path if not in working directory)
-#
+#Converts a dataframe of digitisation calibration pole data to a "flattened" format, with  one row per pole.
 #Use the following column names within fields when the relevant information is present:
 # cam_id: camera identifier
 # site_id: site identifier
@@ -513,11 +541,23 @@ decimal.time <- function(dat, sep=":"){
 # distance: distance from camera; required for camera calibration
 # length: length of pole digitised; required for camera calibration
 # height: height of digitised point off the ground; required for site calibration
+
+#INPUT
+# dat: dataframe of digitisation data (ideally created by read.digidat).
+
 #OUTPUT
-#A dataframe with the two ditisation points per pole arranged in single rows.
-#Returns the input data minus x, y and sequence_annotation, plus columns:
-# xb, yb, xt, yt: x and y co-ordinates of pole b(ases) and t(ops)
-#Records are discarded if they have non-numeric distance, length or height values
+# A dataframe with the two ditisation points per pole arranged in single rows.
+# Returns the input data minus x, y and sequence_annotation, plus columns:
+#  xb, yb, xt, yt: x and y co-ordinates of pole b(ottom) and t(op) positions digitised
+#  hb, ht: actual heights above ground of the digitised pole positions
+# A single point per pole can be digitise, but only for site calibration, and only if distance is
+# also provided and height=0. Where a single pole is digitised at height 0, xt and yt values are imputed at ht=1.
+# Pole records are discarded with a warning if:
+#  1. they have non-numeric distance, length or height values;
+#  2. they are digitised more than twice;
+#  3. they are digitised only once at height > 0;
+#  4. conflicting distance values are given for two digitisation points.
+
 make.poledat <- function(dat){
 
   flatten <- function(dat){
@@ -612,12 +652,13 @@ make.poledat <- function(dat){
 # cam_id: camera ID code for each record (optional - see below)
 
 #OUTPUT
-#An object of class camcal (camera calibration), 
-#describing relationship between pixel size and distance.
-# model: quadratic model of FSratio against relative x position
-# APratio: ratio of angle to *relative* x pixel position
-#If cam_id is provided, one model is fitted for each unique camera ID.
-#If data are for a single camera, cam_id can be omitted
+# A list object of class camcal (ie camera calibration), describing relationship between
+# pixel size and radial distance, and x-pixel position and angular distance, with elements:
+#  model: quadratic model of FSratio against relative x position (ie focal_length:sensor_size)
+#  APratio: ratio of angle to *relative* x pixel position
+# If cam_id is provided, one model is fitted for each unique camera ID.
+# If data are for a single camera, cam_id can be omitted
+
 cal.cam <- function(poledat){
   #Internal function fits a single camera calibration model
   cal <- function(dat){
@@ -653,6 +694,7 @@ cal.cam <- function(poledat){
 #plot.camcal####
 
 #Show diagnostic plots for camera calibration model
+
 plot.camcal <- function(mod){
   dat <- mod$data
   cols <- grey.colors(11, start=0, end=0.8)
@@ -682,6 +724,28 @@ plot.camcal <- function(mod){
 
 #cal.site####
 
+#Create a site calibration model from data on pole distances from camera and positions within image.
+#Pole distances can EITHER be predicted using provided camera calibration model(s), OR be provided as
+#a field named distance in input data.
+
+#INPUT
+# dat: data frame of pole digitisation data with (at least) columns:
+#  xb, yb, xt, yt: x and y co-ordinates of pole b(ottom) and t(op) positions digitised
+#  hb, ht: actual heights above ground of the digitised pole positions
+#  xdim, ydim: x and y dimensions of each image
+#  site_id: camera ID code for each record (optional - if not present, all data assumed to be from a single site)
+#  distance: actual pole distances from camera (required if cmod not provided)
+# cmod: a (list of) camera model(s); if multiple models, element names are used for matching
+# lookup: a dataframe with (at least) columns cam_id and site_id, mapping cameras to sites
+
+#OUTPUT
+# A list object of class sitecal (ie site calibration), describing relationship between pixel position and distance, 
+# with elements:
+#  cam.model: the camera calibration model used to predict distances (if any)
+#  site.model: non-linear least squares fit of distance (d) to *relative* x and y pixel positions:
+#              d ~ b1 / (y-(b2+b3*x))
+#  data: the data input to the model
+#  dim: the x,y pixel dimensions of the images used for calibration
 
 cal.site <- function(dat, cmod=NULL, lookup=NULL){
 
@@ -734,6 +798,7 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL){
 #plot.sitecal####
 
 #Show diagnostic plots for site calibration model
+
 plot.sitecal <- function(mod){
   dim <- as.list(apply(mod$site.model$data[,c("xdim","ydim")],2,unique))
   dat <- mod$site.model$data
@@ -783,6 +848,7 @@ View(smods[[2]]$site.model$data)
 #OUTPUT
 #A vector numeric radii.
 #Note, units depend on the units of pole height above ground used to calibrate the site model
+
 predict.r <- function(mod, relx, rely){
   res <- predict(mod, newdata=data.frame(relx=relx, rely=rely))
   res[res<0] <- Inf
@@ -793,14 +859,20 @@ predict.r <- function(mod, relx, rely){
 #predict.pos####
 
 #Predicts position relative to camera given image pixel positions and site calibration models 
+
 #INPUT
-# file: text string giving name of tracker file containing data to process 
-# mod: named list of site calibration models; names must be matched by site_id column in file
+# dat: a dataframe of digitisation data containing (at least) columns:
+#  x,y: x and y pixel positions for each digitised point
+#  xdim,ydim: x and y pixel dimensions of each image; must be consistent for each site_id
+#  site_id: site identifier
+# mod: a named list of site calibration models; names must be matched by site_id column in dat
+
 #OUTPUT
-#dataframe of original data with radial and angular distances from camera appended
+# A dataframe of original data with radial and angular distances from camera appended.
+
 predict.pos <- function(dat, mod){
 
-  required <- c("x","y","xdim","ydim","site_id","sequence_annotation","sequence_id")
+  required <- c("x","y","xdim","ydim","site_id")
   if(!all(required %in% names(dat))) 
     stop(paste("dat must contain all of these columns:", paste(required, collapse=" ")))
 
@@ -825,20 +897,21 @@ predict.pos <- function(dat, mod){
 
 #seq.data####
 
-#Dataframe of image-to-image changes for each row in dat
+#Creates a dataframe of image-to-image changes for each row in dat
 
 #INPUT
-#Dataframe dat produced by predict.pos with columns:
-#   sequence_id
-#   x,y
-#   radius, angle
+# A dataframe dat produced by predict.pos with columns:
+#   sequence_id: sequence identifier
+#   x,y: x and y pixel positions of dixitised points
+#   radius, angle: predicted radial and angular distances from camera
 
 #OUTPUT
-#Dataframe of:
+# A dataframe of:
 #   imgcount: image number within sequence
 #   pixdiff: pixel displacement within image
 #   displacement: estimated linear distance moved
 #   d.angle: change in angle from camera
+
 seq.data <- function(dat){
   coseqn <- function(r1,r2,theta) sqrt(r1^2+r2^2-2*r1*r2*cos(abs(theta)))
   imgcount <-  sequence(table(dat$sequence_id))
@@ -853,12 +926,13 @@ seq.data <- function(dat){
 
 #seq.summary####
 
-#Summarise sequences
+#Summarise sequences to generate speed of movement estimates
 
 #INPUT
-#Dataframe dat produced by predict.pos with columns:
-# ...
-#interval: time between frames within sequences
+# Dataframe dat produced by predict.pos with (at least) columns:
+#  sequence_id: sequence identifiers
+#  CreateDate: character date and time of image creation, formated as %Y:%m:%d %H:%M:%S
+#  imgcount: the number of images in each sequence
 
 #OUTPUT
 #A list of dataframes:
@@ -871,6 +945,7 @@ seq.data <- function(dat){
 #   time: time taken (diff[range{frame.number}]*interval)
 #   speed: travel speed (dist/time)
 #   frames: number of frames digitised
+
 seq.summary <- function(dat){
   calc.mov <- function(dat){
     n <- as.numeric(table(dat$sequence_id))
