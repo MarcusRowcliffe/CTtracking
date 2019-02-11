@@ -1,9 +1,7 @@
 setwd("C:/Users/scott/Desktop/Thesis/Github/CTtracking")
 library(data.table)
-source("CTtracking.r")
+source("CTtracking_1_0.r")
 
-<<<<<<< HEAD
-=======
 #Edit cam_cal file (new version created: cam_cal2)
 # (need to reshape annotations to give single uniqe pole_id, and rename some columns)
 dat <- read.csv("./Gee data/cam_cal.csv")
@@ -34,7 +32,6 @@ dat <- dat[-c(264,265,266,267,268,269), ]
 write.csv(dat, "./Gee data/new_full_data2.csv", row.names=F)
 
 
->>>>>>> a60d7aa01247219561f03d925ed7e8db3cbeed5c
 #Extract data for camera calibration model
 cdat <- read.poledat("./Gee data/cam_cal.csv", "pole_id;distance;length")
 View(cdat)
@@ -49,14 +46,12 @@ lapply(cmod, plot)
 
 
 #Extract data for camera calibration model
-<<<<<<< HEAD
 sdat <- read.poledat("./Gee data/REM_dig.csv", "height")
 View(sdat)
 
 #FIXING A PROBLEM
 #One site_id has no cam_id associated - assigning an arbitrary one for now 
 sdat$cam_id[sdat$cam_id==""] <- "B12"
-=======
 sdat <- read.poledat("./Gee data/new_full_data2.csv", "height")
 View(sdat)
 
@@ -82,11 +77,8 @@ par(mfrow=c(1,2))
 lapply(smod, plot)
 
 #Predict positions (angle and radius) for animal data
-<<<<<<< HEAD
 posdat <- predict.pos(file="./Gee data/REM_dig.csv", mod=smod, fields="species")
-=======
 posdat <- predict.pos(file="./Gee data/new_full_data2.csv", mod=smod, fields="species")
->>>>>>> a60d7aa01247219561f03d925ed7e8db3cbeed5c
 View(posdat)
 #Might want to check how many radii are infinite, or finite but improbably large
 sum(is.infinite(posdat$radius))
