@@ -7,7 +7,7 @@ setClass("sitecal", representation("list"))
 #GENERAL FUNCTIONS#############################################
 
 
-#read.exif####
+#read.exif#
 
 #Runs command line ExifTool to extract metadata of all image/video/audio files within a folder
 #For a list of supported formats see https://www.sno.phy.queensu.ca/~phil/exiftool
@@ -45,7 +45,7 @@ read.exif <- function(inpath, outpath=NULL, toolpath="C:/Exiftool", return=TRUE,
 }
 
 
-#list.files.only####
+#list.files.only#
 
 #Wrapper for list.files that over-rides include.dirs argument to return only file names
 
@@ -65,7 +65,7 @@ list.files.only <- function(path, ...){
 #VIDEO PROCESSING FUNCTIONS#############################################
 
 
-#extract.frames####
+#extract.frames#
 
 #Extracts frames at a given frame rate from video files, and optionally adds a timestamp to the
 #metadata, reconstructed from original video time stamp and frame position.
@@ -149,7 +149,7 @@ extract.frames <- function(fps, inpath=NULL, outpath="frames", filetypes=c("MP4"
 }
 
 
-#get.min.metadate####
+#get.min.metadate#
 
 #Returns the minimum dates in each row of an exif dataframe containing character format
 #date-times with ":" separators
@@ -169,7 +169,7 @@ get.min.metadate <- function(exf){
   strptime(apply(exf[,j], 1, f), "%Y:%m:%d %H:%M:%S", tz="UTC")
 }  
 
-#extract####
+#extract#
 
 #Extracts frames from a single video file
 #INPUT
@@ -194,7 +194,7 @@ extract <- function(fps, file, outpath, toolpath="C:/FFmpeg/bin", suffix.length=
 }
 
 
-#stamptime####
+#stamptime#
 
 #Adds a time stamp to images extracted from video. Calculates stamp values from video start
 #time and the frame rate used for extraction. Function requires .ExifTool_config file to be
@@ -250,7 +250,7 @@ stamptime <- function(fps, path, vexf, toolpath="C:/Exiftool", offset=0, recursi
 }
 
 
-#copy.images####
+#copy.images#
 
 #Copies all image (JPEG) files in inpath to outpath, for use when each camera trap trigger resulted
 #in an image immediately followed by a video. Optionally crops the resulting images to give the same 
@@ -325,7 +325,7 @@ copy.images <- function(inpath, outpath, exf=NULL, vidtypes=c("MP4", "AVI"), too
 }
 
 
-#crop####
+#crop#
 
 #Creates a cropped copy of image (JPEG) files to conform to the field of view of video frames from
 #the same camera setting.
@@ -384,7 +384,7 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 #DATA PREP FUNCTIONS#############################################
 
 
-#split.annotations####
+#split.annotations#
 
 #Splits out multi-field annotations entered as a single field
 
@@ -415,7 +415,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 }
 
 
-#read.digidat####
+#read.digidat#
 
 #Reads and merges csv files of digitisation data from animaltracker tool.
 
@@ -504,7 +504,7 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
 }
 
 
-#decimal.time####
+#decimal.time#
 
 #Converts text time data to decimal time of day. Default format hh:mm:ss, but can handle 
 #other separators and minutes and seconds can be missing.
@@ -531,7 +531,7 @@ decimal.time <- function(dat, sep=":"){
 }
 
 
-#make.poledat####
+#make.poledat#
 
 #Converts a dataframe of digitisation calibration pole data to a "flattened" format, with  one row per pole.
 #Use the following column names within fields when the relevant information is present:
@@ -639,7 +639,7 @@ make.poledat <- function(dat){
 #CALIBRATION FUNCTIONS#############################################
 
 
-#cal.cam####
+#cal.cam#
 
 #Creates a camera calibration model
 
@@ -691,7 +691,7 @@ cal.cam <- function(poledat){
 }
 
 
-#plot.camcal####
+#plot.camcal#
 
 #Show diagnostic plots for camera calibration model
 
@@ -722,7 +722,7 @@ plot.camcal <- function(mod){
 }
 
 
-#cal.site####
+#cal.site#
 
 #Create a site calibration model from data on pole distances from camera and positions within image.
 #Pole distances can EITHER be predicted using provided camera calibration model(s), OR be provided as
@@ -795,7 +795,7 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL){
 }
 
 
-#plot.sitecal####
+#plot.sitecal#
 
 #Show diagnostic plots for site calibration model
 
@@ -831,12 +831,11 @@ plot.sitecal <- function(mod){
     with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
   }
 }
-View(smods[[2]]$site.model$data)
 
 #DATA SUMMARY FUNCTIONS#############################################
 
 
-#predict.r####
+#predict.r#
 
 #Predict radial distance from camera given pixel positions
 
@@ -856,7 +855,7 @@ predict.r <- function(mod, relx, rely){
 }
 
 
-#predict.pos####
+#predict.pos#
 
 #Predicts position relative to camera given image pixel positions and site calibration models 
 
@@ -892,10 +891,13 @@ predict.pos <- function(dat, mod){
                angle=cm[[1]]$APratio * (dt$x/dt$xdim-0.5))
   })
   res <- bind_rows(res)
+  tab <- table(res$sequence_id)
+  res$frame_count <- sequence(tab)
+  res
 }
 
 
-#seq.data####
+#seq.data#
 
 #Creates a dataframe of image-to-image changes for each row in dat
 
@@ -924,7 +926,7 @@ seq.data <- function(dat){
 }
 
 
-#seq.summary####
+#seq.summary#
 
 #Summarise sequences to generate speed of movement estimates
 
@@ -966,5 +968,5 @@ seq.summary <- function(dat){
   dat <- dat[order(dat$sequence_id), ]
   n <- table(dat$sequence_id)
   i <- dat$sequence_id %in% names(n)[n==1]
-  list(trigdat=subset(dat, i), movdat=calc.mov(subset(dat, !i)))
+  calc.mov(subset(dat, !i))
 }
