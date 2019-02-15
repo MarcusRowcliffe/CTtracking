@@ -471,7 +471,9 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
 
   if(!is.null(exifcols) | trans.xy!="none"){
     if(is.null(exifdat)) exifdat <- read.exif(path)
-    exifdat <- exifdat[match(df$filename, exifdat$FileName), ]
+    i <- match(df$filename, exifdat$FileName)
+    if(any(is.na(i))) stop("Can't find all digitised files in exif data - check you've supplied all the necessary data or images")
+    exifdat <- exifdat[i, ]
     df <- cbind(df, exifdat[, exifcols])
     if("CreateDate" %in% names(df)) df$TimeOfDay <- decimal.time(df$CreateDate)
     rownames(df) <- 1:nrow(df)
@@ -517,6 +519,7 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
 # An array of decimal times in hours.
 
 decimal.time <- function(dat, sep=":"){
+  dat <- as.character(dat)
   f <- function(x){
     res <- as.numeric(x[1])
     if(length(x)>1) res <- res+as.numeric(x[2])/60
@@ -586,30 +589,32 @@ make.poledat <- function(dat){
   
   if(!"pole_id" %in% names(dat))
     if("Directory" %in% names(dat))
-      dat$pole_id <- paste(dat$Directory, dat$frame_number, sep="_") else
-        dat$pole_id <- dat$frame_number
-  
+      dat$pole_id <- paste(dat$Directory, dat$filename, sep="/") else
+        dat$pole_id <- dat$filename
+
+  duff2 <- duff3 <- duff4 <- FALSE
   tab <- table(dat$pole_id)
   if("height" %in% names(dat)){
-    mnh <- tapply(dat$height, dat$pole_id, min)
-    duff <- (tab==1 & mnh>0) | tab>2
+    minh <- tapply(dat$height, dat$pole_id, min)
+    duff1 <- tab>2
+    duff2 <- (tab==1 & minh>0)
   } else
-    duff <- tab>2
-  if(any(duff)){
-    dat <- droplevels(dat[!dat$pole_id %in% names(which(duff)), ])
-    warning(paste("Some poles digitised once at height >0 or  digitised >twice and were removed:", 
-                  paste(names(which(duff)), collapse=" ")))
-  }
-  if("distance" %in% names(dat)){
-    duff <- with(dat, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
-    if(any(duff))
-      stop(paste("Some poles did not have matching distance for top and base:",
-                 paste(names(which(duff)), collapse=" ")))
-  }
+    duff1 <- tab>2
+  if("distance" %in% names(dat))
+    duff3 <- with(dat, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
+    
+  if(any(duff1 | duff2 | duff3))
+    dat <- droplevels(dat[!dat$pole_id %in% names(which(duff1 | duff2 | duff3)), ])
   
   tab <- table(dat$pole_id)
   i <- dat$pole_id %in% names(tab)[tab==1]
   res <- flatten(dat[!i, ])  
+  if("height" %in% names(dat)){
+    duff4 <- res$hb>=res$ht
+    names(duff4) <- res$pole_id
+    if(any(duff4, na.rm=TRUE)) res <- droplevels(res[!duff4, ])
+  }
+  
   solos <- dat[i, ]
   if(nrow(solos)>0 & "distance" %in% names (dat)){
     pxratio <- with(res,  sqrt((xb-xt)^2+(yb-yt)^2) / (ht-hb))
@@ -623,13 +628,24 @@ make.poledat <- function(dat){
     res <- rbind(res, flatten(rbind(solos,solos2)))
   }
   res <- res[order(res$pole_id), ]
-
-  if("height" %in% names(dat)){
-    duff <- res$hb>=res$ht
-    if(any(duff, na.rm=TRUE)){
-      warning(paste("Some poles had base height >= top height and were removed:", 
-                    paste(res$pole_id[duff], collapse=" ")))
-      res <- droplevels(res[!duff, ])
+  
+  if(any(duff1 | duff2 | duff3) | any(duff4)){
+    message("Warning:\n Some poles were discarded because they...")
+    if(any(duff1)){
+      message("...were digitised  more than twice:")
+      cat(names(which(duff1)), sep="\n")
+    }
+    if(any(duff2)){
+      message("...were digitised only once at height > 0:")
+      cat(names(which(duff2)), sep="\n")
+    }
+    if(any(duff3)){
+      message("...had different distances at top and base:")
+      cat(names(which(duff3)), sep="\n")
+    }
+    if(any(duff4)){
+      message("...had base height >= top height:")
+      cat(names(which(duff4)), sep="\n")
     }
   }
   res
