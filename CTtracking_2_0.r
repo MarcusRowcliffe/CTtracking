@@ -447,7 +447,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
 
-read.digidat <- function(path, exifdat=NULL, annotations=NULL,
+read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
@@ -502,6 +502,8 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL,
       df$ydim <- unique(exifdat[!j,]$ImageHeight)
     }
   }
+  
+  if(flatten) df <- make.poledat(df)
   df
 }
 
@@ -536,11 +538,15 @@ decimal.time <- function(dat, sep=":"){
 
 #make.poledat#
 
-#Converts a dataframe of digitisation calibration pole data to a "flattened" format, with  one row per pole.
-#Use the following column names within fields when the relevant information is present:
+#Converts a dataframe of digitisation calibration pole data to a "flattened" format, 
+#with  one row per pole. Input data must have at least fields x and y (pixel positions), 
+#plus either a pole identifier field (pole_id) or an image file name field (filename). 
+#If filename is provided but not pole_id, filename is taken to be the pole identifier,
+#comined with Directory if this is present. Specific additional fields, when present,
+#must use the following names:
+# Directory: full path to the directory containing the digitised image
 # cam_id: camera identifier
 # site_id: site identifier
-# pole_id: pole identifier; if not provided in annotations, frame_number is taken to be the pole identifier
 # distance: distance from camera; required for camera calibration
 # length: length of pole digitised; required for camera calibration
 # height: height of digitised point off the ground; required for site calibration
@@ -573,6 +579,12 @@ make.poledat <- function(dat){
     dat <- cbind(dat[j,], xy)
     dat[, !names(dat) %in%  c("x","y","height")]
   }
+
+  colnames <- names(dat)
+  gotxy <- all(c("x","y") %in% colnames)
+  gotpid <- any(c("pole_id", "filename") %in% colnames)
+  if(!gotxy & !gotpid) 
+    stop("Input dat must have at least columns x, y, and EITHER pole_id OR filename")
 
   if("height" %in% names(dat)){
     dat$height <- suppressWarnings(as.numeric(as.character(dat$height)))
@@ -620,7 +632,7 @@ make.poledat <- function(dat){
     pxratio <- with(res,  sqrt((xb-xt)^2+(yb-yt)^2) / (ht-hb))
     invd <- 1/res$distance
     relx2 <- (res$xb / res$ImageWidth - 0.5)^2
-    mod <- lm(pxratio~invd+relx2-1, data=dat)
+    mod <- lm(pxratio~invd+relx2-1)
     nd <- data.frame(invd=1/solos$distance, relx2=(solos$x/solos$ImageWidth-0.5)^2)
     solos2 <- solos
     solos2$height <- 1
