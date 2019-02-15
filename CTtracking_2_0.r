@@ -1,11 +1,13 @@
 #NOTES ON PREPARING FILES####
 
 #Before digitising, ensure that images are organised into placement_specific folders, 
-#named with placement identifiers. Subfolders are allowed. Images must currently have 
+#named with placement identifiers. Subfolders are allowed. Images must (currently) have 
 #names that are unique across the whole dataset.
 
 #Organise digitisation csv files by type - camera calibration (if used), site calibration
-#and animal, with one folder per type. Name csvl files with placement identifiers.
+#and animal, with one folder per type. Name csv files with placement identifiers. 
+#NB placement identifiers must be consistently named between calibration and animal digitisation
+#files, including case matching.
 
 #When digitising with multiple fields in the sequence_annotation box, use a semicolon separator
 #e.g. for a point digitised 0.5 m up a pole at 6 m from the camera, use annotation 0.5;6.
