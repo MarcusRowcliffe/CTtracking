@@ -596,7 +596,7 @@ make.poledat <- function(dat){
   colnames <- names(dat)
   gotxy <- all(c("x","y") %in% colnames)
   gotpid <- any(c("pole_id", "filename") %in% colnames)
-  if(!gotxy & !gotpid) 
+  if(!gotxy | !gotpid) 
     stop("Input dat must have at least columns x, y, and EITHER pole_id OR filename")
 
   if("height" %in% names(dat)){
