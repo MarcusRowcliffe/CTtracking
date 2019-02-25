@@ -509,14 +509,14 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
     df$y.original <- df$y
     if(trans.xy=="img.to.vid"){
       j <- exifdat$FileSource!="" & !is.na(exifdat$VideoHeight)
-      df$x[j] <- with(exifdat[j,], VideoHeight * (df$x[j]-VideoXorigin) / VideoHeightOnImage)
-      df$y[j] <- with(exifdat[j,], VideoWidth * (df$y[j]-VideoYorigin) / VideoWidthOnImage)
+      df$x[j] <- with(exifdat[j,], VideoWidth * (df$x[j]-VideoXorigin) / VideoWidthOnImage)
+      df$y[j] <- with(exifdat[j,], VideoHeight * (df$y[j]-VideoYorigin) / VideoHeightOnImage)
       df$xdim <- with(exifdat, ifelse(is.na(VideoWidth), ImageWidth, VideoWidth))
       df$ydim <- with(exifdat, ifelse(is.na(VideoHeight), ImageHeight, VideoHeight))
     } else{
       j <- exifdat$FileSource=="" & !is.na(exifdat$VideoHeight)
-      df$x[j] <- with(exifdat[j,], VideoXorigin + VideoHeightOnImage*df$x[j] / VideoHeight)
-      df$y[j] <- with(exifdat[j,], VideoYorigin + VideoWidthOnImage*df$y[j] / VideoWidth)
+      df$x[j] <- with(exifdat[j,], VideoXorigin + VideoWidthOnImage*df$x[j] / VideoWidth)
+      df$y[j] <- with(exifdat[j,], VideoYorigin + VideoHeightOnImage*df$y[j] / VideoHeight)
       df$xdim <- unique(exifdat[!j,]$ImageWidth)
       df$ydim <- unique(exifdat[!j,]$ImageHeight)
     }
