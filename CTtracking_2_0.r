@@ -1,16 +1,19 @@
 #NOTES ON PREPARING FILES####
 
 #Before digitising, ensure that images are organised into placement_specific folders, 
-#named with placement identifiers. Subfolders are allowed. Images must (currently) have 
+#named with placement identifiers. Subfolders are allowed. Images must currently have 
 #names that are unique across the whole dataset.
 
 #Organise digitisation csv files by type - camera calibration (if used), site calibration
-#and animal, with one folder per type. Name csv files with placement identifiers. 
-#NB placement identifiers must be consistently named between calibration and animal digitisation
-#files, including case matching.
+#and animal, with one folder per type. Name csv files with placement (or camera) identifiers
+#that are consistent across types.
 
 #When digitising with multiple fields in the sequence_annotation box, use a semicolon separator
 #e.g. for a point digitised 0.5 m up a pole at 6 m from the camera, use annotation 0.5;6.
+
+#If reading metadata from a previously prepared csv file, set strignsAsFactors=FALSE.
+#ISSUE? fail if time used but in factor format, with mesasge suggesting above solution 
+#(or just convert to character silently)
 
 
 require(magick)
@@ -490,7 +493,8 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
     if(any(is.na(i))) stop("Can't find all digitised files in exif data - check you've supplied all the necessary data or images")
     exifdat <- exifdat[i, ]
     df <- cbind(df, exifdat[, exifcols])
-    if("CreateDate" %in% names(df)) df$TimeOfDay <- decimal.time(df$CreateDate)
+    if("CreateDate" %in% names(df) & length(unique(nchar(df$CreateDate)))==1)
+      df$TimeOfDay <- decimal.time(df$CreateDate)
     rownames(df) <- 1:nrow(df)
   }
 
@@ -504,13 +508,13 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
     df$x.original <- df$x
     df$y.original <- df$y
     if(trans.xy=="img.to.vid"){
-      j <- exifdat$FileSource!=""
+      j <- exifdat$FileSource!="" & !is.na(exifdat$VideoHeight)
       df$x[j] <- with(exifdat[j,], VideoHeight * (df$x[j]-VideoXorigin) / VideoHeightOnImage)
       df$y[j] <- with(exifdat[j,], VideoWidth * (df$y[j]-VideoYorigin) / VideoWidthOnImage)
-      df$xdim <- exifdat$VideoWidth
-      df$ydim <- exifdat$VideoHeight
+      df$xdim <- with(exifdat, ifelse(is.na(VideoWidth), ImageWidth, VideoWidth))
+      df$ydim <- with(exifdat, ifelse(is.na(VideoHeight), ImageHeight, VideoHeight))
     } else{
-      j <- exifdat$FileSource==""
+      j <- exifdat$FileSource=="" & !is.na(exifdat$VideoHeight)
       df$x[j] <- with(exifdat[j,], VideoXorigin + VideoHeightOnImage*df$x[j] / VideoHeight)
       df$y[j] <- with(exifdat[j,], VideoYorigin + VideoWidthOnImage*df$y[j] / VideoWidth)
       df$xdim <- unique(exifdat[!j,]$ImageWidth)
@@ -921,10 +925,12 @@ predict.pos <- function(dat, mod){
   sites <- unique(dat$site_id)
   if(!any(sites %in% names(mod))) stop("Not all records have a matching site calibration model")
 
-  xdimvals <- with(dat, tapply(xdim, site_id, unique))
-  ydimvals <- with(dat, tapply(ydim, site_id, unique))
-  if(length(unlist(xdimvals))>length(sites) | length(unlist(ydimvals))>length(sites)) 
-    warning(paste("There is more than one unique value per site for xdim and/or ydim in dat"))
+  multidim <- lapply(with(dat, tapply(xdim, site_id, unique)), length)>1 |
+              lapply(with(dat, tapply(ydim, site_id, unique)), length)>1
+  if(any(multidim)){
+    message("Warning:\n There is more than one unique value per site for xdim and/or ydim in site(s):")
+    cat(names(which(multidim)), sep="\n")
+  }
 
   res <- lapply(sites, function(s){
     dt <- subset(dat, site_id==s)
