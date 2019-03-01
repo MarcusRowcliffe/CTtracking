@@ -853,12 +853,13 @@ plot.sitecal <- function(mod){
   
   #PLOT DISTANCE V Y-PIXEL RELATIONSHIP
   cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
-  with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,1.5), ylim=c(0, 1.5*max(distance)),
+  mxx <- max(max(dat$rely),1.5)
+  with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,mxx), ylim=c(0, 1.5*max(distance)),
                  xlab="Relative y pixel position", ylab="Distance from camera",
                  main=unique(dat$site_id), 
                  sub="Shading from image left (dark) to right edge", cex.sub=0.7))
   if(class(mod$site.model$model)=="nls"){
-    sq <- seq(0, 1.5, len=100)
+    sq <- seq(0, mxx, len=100)
     lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
     lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
     lines(sq, predict.r(mod$site.model$model, 0.5, sq), col=colrange[11])
