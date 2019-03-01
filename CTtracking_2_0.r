@@ -794,7 +794,7 @@ plot.camcal <- function(mod){
 #  data: the data input to the model
 #  dim: the x,y pixel dimensions of the images used for calibration
 
-cal.site <- function(dat, cmod=NULL, lookup=NULL){
+cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE){
 
   cal <- function(dat, cmod=NULL){
     dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
@@ -816,7 +816,13 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL){
       poledat$length <- dat$ht-dat$hb
       cmod <- cal.cam(poledat)
     }
-    mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
+    if(flex)
+      mod <- try(nls(distance~b1/(rely^b4-(b2+b3*relx)), data=dat, algorithm="port", 
+                   start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0, b4=1),
+                   lower=c(b1=0,b2=0,b3=-Inf,b4=0), 
+                   upper=c(b1=Inf,b2=min(dat$rely),b3=Inf,b4=Inf),
+                   trace=F )) else
+      mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
                    start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0),
                    lower=c(b1=0,b2=0,b3=-Inf), 
                    upper=c(b1=Inf,b2=min(dat$rely),b3=Inf),
