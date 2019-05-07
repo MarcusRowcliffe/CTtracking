@@ -46,10 +46,9 @@ setClass("sitecal", representation("list"))
 # (or overwritten without warning) within outpath, and optionally preserved
 # (depending on write input)
 
-read.exif <- function(inpath, outpath=NULL, toolpath="C:/Exiftool", return=TRUE, write=FALSE, recursive=TRUE){
+read.exif <- function(inpath, outpath=inpath, toolpath="C:/Exiftool", return=TRUE, write=FALSE, recursive=TRUE){
   wd <- getwd()
   setwd(toolpath)
-  if(is.null(outpath)) outpath <- inpath
   outfile <- paste0(outpath, "/metadata.csv")
   outf <- paste0("\"", outfile, "\"")
   inpath <- paste0("\"", inpath, "\"")
