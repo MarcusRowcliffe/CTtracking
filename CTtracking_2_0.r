@@ -414,9 +414,8 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 # A dataframe with one column per field from the input data. The function fails if not all 
 # entries in dat have the same number of sep characters (implying different numbers of columns),
 # or if the number of colnames doesn't equal the number of columns in dat.
-
 split.annotations <- function(dat, colnames=NULL, sep=";"){
-  lst <- strsplit(dat, ";")
+  lst <- strsplit(dat, sep)
   seps <- unique(unlist(lapply(lst, length)))
   
   if(length(seps)>1) stop("Not all annotations have the same number of entries")
