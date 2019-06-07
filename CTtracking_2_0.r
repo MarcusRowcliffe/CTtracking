@@ -438,7 +438,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 #- Input path should point to a directory containing the digisation data csv files in its root.
 #- The root path must contain ONLY those csv files to be processed.
 #- The csv file names are assumed to be site IDs.
-#- The function Optionally adds metadata from the original images. 
+#- The function optionally adds metadata from the original images. 
 #- In cases where images are a mix of image and video frame, the function also optionally
 #  translates x,y pixel positions from image to video scale or vice versa.
 #- If EITHER pixel translation OR exifcols are specified (ie trans.xy is not "none" OR exifcols is
@@ -449,6 +449,10 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 
 #INPUT
 # path: name of directory containing all required files (see above).
+# exifdat: either a character path to a folder containing images from which to extract exif data, or
+#    a dataframe containing the appropriate metadata
+# annotations: a character vector of column names to give to annotations from the digitisation data
+# flatten: whether or not to flatten paired pole digitisation points for calibration (leave as FALSE for animal points)
 # exifcols: data columns from image metadata to add to the merged dataframe; specify NULL to suppress.
 # trans.xy: type of pixel translation to apply, with options:
 #   "none": no translation
@@ -462,7 +466,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # Optionally, x,y values are translated from image to video scale or vice versa, with original
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
-
+path <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/HomePark19/HomePark2018_Callibration"
 read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
@@ -470,14 +474,25 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
   trans.xy <- match.arg(trans.xy)
 
   files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
+#Kick out non-csv files...to do...
   df.list <- lapply(files, read.csv, stringsAsFactors=FALSE)
   
   colnames <- lapply(df.list, names)
-  if(length(unique(unlist(lapply(colnames, length)))) > 1)
-    stop("Not all files have the same number of columns")
+  n_columns <- unlist(lapply(colnames, length))
+  if(length(unique(n_columns)) > 1){
+    message("Error: Not all files have the same number of columns - check output data")
+    return(data.frame(file=basename(files), n_columns))
+  }
   colnames <- matrix(unlist(colnames), ncol=length(colnames))
-  if(any(apply(colnames, 1, function(x) length(unique(x))) != 1))
-    stop("Not all files have the same column headings")
+  if(any(apply(colnames, 1, function(x) length(unique(x))) != 1)){
+    message("Error: Not all files have the same column headings - check output data")
+    return(data.frame(file=basename(files), t(colnames)))
+  }
+  classes <- unlist(lapply(df.list, function(df) class(df$sequence_annotation)))
+  if(length(unique(classes))>1){
+    message("Error: Sequence annotation classes are not consistent across files - check output data")
+    return(data.frame(file=basename(files), seq_ann_class=classes))
+  }
   
   df <- bind_rows(df.list)
   df <- cbind(df, split.annotations(df$sequence_annotation, annotations))
