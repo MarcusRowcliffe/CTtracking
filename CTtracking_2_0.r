@@ -462,7 +462,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 #OUTPUT
 # A dataframe of the original digitisation data, with sequence_id column reassigned to give
 # unique values to each sequence across the whole dataframe (with original IDs preserved as
-# sequence_id_original), plus new column site_id holding values taken from input csv file names.
+# sequence_id_original), plus new column group_id holding values taken from input csv file names.
 # Optionally, x,y values are translated from image to video scale or vice versa, with original
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
@@ -495,10 +495,9 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
   
   df <- bind_rows(df.list)
   df <- cbind(df, split.annotations(df$sequence_annotation, annotations))
+  df$group_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
   df$sequence_id_original <- df$sequence_id
-  df$sequence_id <- renumber(paste0(df$site_id, df$sequence_id))
-#Change site_id to deploy_id?
-  df$site_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
+  df$sequence_id <- renumber(paste0(df$group_id, df$sequence_id))
 
   if(!is.null(exifcols) | trans.xy!="none"){
     if(is.null(exifdat)) stop("exifdat must be provided if either exifcols are non-null or trans.xy (pixel translation) is specified")
@@ -586,8 +585,6 @@ decimal.time <- function(dat, sep=":"){
 #comined with Directory if this is present. Specific additional fields, when present,
 #must use the following names:
 # Directory: full path to the directory containing the digitised image
-# cam_id: camera identifier
-# site_id: site identifier
 # distance: distance from camera; required for camera calibration
 # length: length of pole digitised; required for camera calibration
 # height: height of digitised point off the ground; required for site calibration
@@ -802,7 +799,6 @@ plot.camcal <- function(mod){
 #  xb, yb, xt, yt: x and y co-ordinates of pole b(ottom) and t(op) positions digitised
 #  hb, ht: actual heights above ground of the digitised pole positions
 #  xdim, ydim: x and y dimensions of each image
-#  site_id: camera ID code for each record (optional - if not present, all data assumed to be from a single site)
 #  distance: actual pole distances from camera (required if cmod not provided)
 # cmod: a (list of) camera model(s); if multiple models, element names are used for matching
 # lookup: a dataframe with (at least) columns cam_id and site_id, mapping cameras to sites
