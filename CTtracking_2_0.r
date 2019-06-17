@@ -467,7 +467,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
 read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
-                        exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
+                        exifcols=NULL,
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
   trans.xy <- match.arg(trans.xy)
@@ -637,10 +637,7 @@ make.poledat <- function(dat){
     dat <- subset(dat, !is.na(length))
   }
   
-  if(!"pole_id" %in% names(dat))
-    if("Directory" %in% names(dat))
-      dat$pole_id <- with(dat, file.path(Directory, filename)) else
-        dat$pole_id <- dat$filename
+  if(!"pole_id" %in% names(dat)) dat$pole_id <- with(dat, paste(group_id, filename, sep="_"))
 
   duff2 <- duff3 <- duff4 <- FALSE
   tab <- table(dat$pole_id)
@@ -715,15 +712,15 @@ make.poledat <- function(dat){
 # length: pole lengths
 # xt,yt,xb,yb: x,y pixel positions of pole tops (t) and bases (b) in image
 # xdim, ydim: x and y dimensions of each image
-# cam_id: camera ID code for each record (optional - see below)
+# group_id: camera ID code for each record (optional - see below)
 
 #OUTPUT
 # A list object of class camcal (ie camera calibration), describing relationship between
 # pixel size and radial distance, and x-pixel position and angular distance, with elements:
 #  model: quadratic model of FSratio against relative x position (ie focal_length:sensor_size)
 #  APratio: ratio of angle to *relative* x pixel position
-# If cam_id is provided, one model is fitted for each unique camera ID.
-# If data are for a single camera, cam_id can be omitted
+# If group_id is provided, one model is fitted for each unique camera ID.
+# If data are for a single camera, group_id can be omitted
 
 cal.cam <- function(poledat){
   #Internal function fits a single camera calibration model
@@ -747,9 +744,9 @@ cal.cam <- function(poledat){
   if(!all(required %in% names(poledat))) 
     stop(paste("poledat must contain all of these columns:", paste(required, collapse=" ")))
   
-  if("cam_id" %in% names(poledat)){
-    cams <- unique(poledat$cam_id)
-    out <- lapply(cams, function(cam) cal(subset(poledat, cam_id==cam)))
+  if("group_id" %in% names(poledat)){
+    cams <- unique(poledat$group_id)
+    out <- lapply(cams, function(cam) cal(subset(poledat, group_id==cam)))
     names(out) <- cams
   } else
     out <- list(cam=cal(poledat))
@@ -768,7 +765,7 @@ plot.camcal <- function(mod){
   #PLOT POLE:PIXEL RATIO V DISTANCE RELATIONSHIP
   x <- abs(dat$relx)
   i <- round(1 + (x-min(x))*10/diff(range(x)))
-  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=unique(dat$cam_id),
+  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=unique(dat$group_id),
                  ylab="m/pixel", xlab="distance", 
                  sub="Shading from image centre (dark) to edge", cex.sub=0.7))
   FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
@@ -779,7 +776,7 @@ plot.camcal <- function(mod){
   #PLOT POLE IMAGE
   d <- dat$distance
   i <- round(1 + (d-min(d))*10/diff(range(d)))
-  plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=unique(dat$cam_id),
+  plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=unique(dat$group_id),
        xlab="x pixel", ylab="y pixel", 
        sub="Shading from near camera (dark) to far", cex.sub=0.7)
   for(p in 1:nrow(dat))
@@ -851,12 +848,12 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE){
     res
   }
   
-  sites <- unique(dat$site_id)
+  sites <- unique(dat$group_id)
   if(is.null(cmod)){
-    out <- lapply(sites, function(s) cal(subset(dat, site_id==s)))
+    out <- lapply(sites, function(s) cal(subset(dat, group_id==s)))
     } else{
       if(is.null(lookup)) stop("Site-camera lookup table must be provided if camera models are specified")
-      if(!all(sites %in% lookup$site_id)) stop("Not all dat$site_id values have a matching value in lookup$site_id")
+      if(!all(sites %in% lookup$site_id)) stop("Not all dat$group_id values have a matching value in lookup$site_id")
       if(any(!lookup$cam_id[match(sites, lookup$site_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
       out <- lapply(sites, function(s)
         cal(subset(dat, site_id==s), cmod[[lookup$cam_id[match(s, lookup$site_id)]]]))
