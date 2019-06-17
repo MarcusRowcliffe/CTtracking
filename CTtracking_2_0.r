@@ -452,7 +452,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # exifdat: either a character path to a folder containing images from which to extract exif data, or
 #    a dataframe containing the appropriate metadata
 # annotations: a character vector of column names to give to annotations from the digitisation data
-# flatten: whether or not to flatten paired pole digitisation points for calibration (leave as FALSE for animal points)
+# pair: whether or not to pair up paired pole digitisation points for calibration (leave as FALSE for animal points)
 # exifcols: data columns from image metadata to add to the merged dataframe; specify NULL to suppress.
 # trans.xy: type of pixel translation to apply, with options:
 #   "none": no translation
@@ -466,7 +466,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # Optionally, x,y values are translated from image to video scale or vice versa, with original
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
-read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
+read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
@@ -544,7 +544,7 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
     }
   }
   
-  if(flatten) df <- make.poledat(df)
+  if(pair) df <- make.poledat(df)
   df
 }
 
@@ -579,7 +579,7 @@ decimal.time <- function(dat, sep=":"){
 
 #make.poledat#
 
-#Converts a dataframe of digitisation calibration pole data to a "flattened" format, 
+#Converts a dataframe of digitisation calibration pole data to a "paire up" format, 
 #with  one row per pole. Input data must have at least fields x and y (pixel positions), 
 #plus either a pole identifier field (pole_id) or an image file name field (filename). 
 #If filename is provided but not pole_id, filename is taken to be the pole identifier,
@@ -610,7 +610,7 @@ decimal.time <- function(dat, sep=":"){
 
 make.poledat <- function(dat){
 
-  flatten <- function(dat){
+  pairup <- function(dat){
     dat <- dat[order(dat$pole_id, dat$y), ]
     j <- 2*(1:(nrow(dat)/2))
     xy <- cbind(dat[j, c("x","y")], dat[j-1, c("x","y")])
@@ -661,7 +661,7 @@ make.poledat <- function(dat){
   
   tab <- table(dat$pole_id)
   i <- dat$pole_id %in% names(tab)[tab==1]
-  res <- flatten(dat[!i, ])  
+  res <- pairup(dat[!i, ])  
   if("height" %in% names(dat)){
     duff4 <- res$hb>=res$ht
     names(duff4) <- res$pole_id
@@ -678,7 +678,7 @@ make.poledat <- function(dat){
     solos2 <- solos
     solos2$height <- 1
     solos2$y <- solos$y-predict(mod, newdata=nd)
-    res <- rbind(res, flatten(rbind(solos,solos2)))
+    res <- rbind(res, pairup(rbind(solos,solos2)))
   }
   res <- res[order(res$pole_id), ]
   
