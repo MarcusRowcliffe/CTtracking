@@ -466,7 +466,6 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # Optionally, x,y values are translated from image to video scale or vice versa, with original
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
-path <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/HomePark19/HomePark2018_Callibration"
 read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
                         exifcols=c("SourceFile", "Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
@@ -474,7 +473,7 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
   trans.xy <- match.arg(trans.xy)
 
   files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
-#Kick out non-csv files...to do...
+  if(length(files)==0) stop("No csv files found in path")
   df.list <- lapply(files, read.csv, stringsAsFactors=FALSE)
   
   colnames <- lapply(df.list, names)
@@ -498,14 +497,24 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
   df <- cbind(df, split.annotations(df$sequence_annotation, annotations))
   df$sequence_id_original <- df$sequence_id
   df$sequence_id <- renumber(paste0(df$site_id, df$sequence_id))
+#Change site_id to deploy_id?
   df$site_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
 
   if(!is.null(exifcols) | trans.xy!="none"){
-    if(is.null(exifdat)) exifdat <- read.exif(path)
-    i <- match(df$filename, exifdat$FileName)
+    if(is.null(exifdat)) stop("exifdat must be provided if either exifcols are non-null or trans.xy (pixel translation) is specified")
+    if(is.character(exifdat)) exifdat <- read.exif(exifdat)
+    dirs <- tools::file_path_sans_ext(basename(files))
+    if(any(!dirs %in% basename(exifdat$Directory))) stop("Not all csv filenames have matching image directories")
+    df$filename <- file.path(dirname(exifdat$Directory[1]),
+                           rep(dirs, unlist(lapply(df.list, nrow))),
+                           df$filename)
+
+    i <- match(df$filename, exifdat$SourceFile)
     if(any(is.na(i))) stop("Can't find all digitised files in exif data - check you've supplied all the necessary data or images")
     exifdat <- exifdat[i, ]
-    df <- cbind(df, exifdat[, exifcols])
+    addn <- data.frame(exifdat[, exifcols])
+    names(addn) <- exifcols
+    df <- cbind(df, addn)
     if("CreateDate" %in% names(df) & length(unique(nchar(df$CreateDate)))==1)
       df$TimeOfDay <- decimal.time(df$CreateDate)
     rownames(df) <- 1:nrow(df)
@@ -516,7 +525,7 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, flatten=FALSE,
     df$ydim <- exifdat$ImageHeight
   } else{
     if(!"VideoHeight" %in% names(exifdat))
-      stop("No video info found in image metadata - must be there if pixel translation is specified (trans.xy!=\"none\"")
+      stop("No video dimension info found in image metadata - must be there if pixel translation is specified (trans.xy!=\"none\"")
 
     df$x.original <- df$x
     df$y.original <- df$y
@@ -618,7 +627,7 @@ make.poledat <- function(dat){
   if(!gotxy | !gotpid) 
     stop("Input dat must have at least columns x, y, and EITHER pole_id OR filename")
 
-  if("height" %in% names(dat)){
+  if("height" %in% colnames){
     dat$height <- suppressWarnings(as.numeric(as.character(dat$height)))
     dat <- subset(dat, !is.na(height))
   }
@@ -633,7 +642,7 @@ make.poledat <- function(dat){
   
   if(!"pole_id" %in% names(dat))
     if("Directory" %in% names(dat))
-      dat$pole_id <- paste(dat$Directory, dat$filename, sep="/") else
+      dat$pole_id <- with(dat, file.path(Directory, filename)) else
         dat$pole_id <- dat$filename
 
   duff2 <- duff3 <- duff4 <- FALSE
