@@ -764,32 +764,39 @@ cal.cam <- function(poledat){
 
 #Show diagnostic plots for camera calibration model
 
-plot.camcal <- function(mod){
-  dat <- mod$data
-  cols <- grey.colors(11, start=0, end=0.8)
+plot.camcal <- function(mods){
   
-  #PLOT POLE:PIXEL RATIO V DISTANCE RELATIONSHIP
-  x <- abs(dat$relx)
-  i <- round(1 + (x-min(x))*10/diff(range(x)))
-  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=unique(dat$group_id),
-                 ylab="m/pixel", xlab="distance", 
-                 sub="Shading from image centre (dark) to edge", cex.sub=0.7))
-  FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
-  dr <- range(dat$distance)
-  lines(dr, dr/(FS[1]*mod$dim$y), col=cols[1])
-  lines(dr, dr/(FS[2]*mod$dim$y), col=cols[11])
-  
-  #PLOT POLE IMAGE
-  d <- dat$distance
-  i <- round(1 + (d-min(d))*10/diff(range(d)))
-  plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=unique(dat$group_id),
-       xlab="x pixel", ylab="y pixel", 
-       sub="Shading from near camera (dark) to far", cex.sub=0.7)
-  for(p in 1:nrow(dat))
-    lines(dat[p,c("xb","xt")], -dat[p,c("yb","yt")], type="l", lwd=2, col=cols[i[p]])
-  lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
-}
+  plotmod <- function(mod){
+    site <- names(mod)
+    mod <- mod[[1]]
+    
+    dat <- mod$data
+    cols <- grey.colors(11, start=0, end=0.8)
+    
+    #PLOT POLE:PIXEL RATIO V DISTANCE RELATIONSHIP
+    x <- abs(dat$relx)
+    i <- round(1 + (x-min(x))*10/diff(range(x)))
+    with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=site,
+                   ylab="m/pixel", xlab="distance", 
+                   sub="Shading from image centre (dark) to edge", cex.sub=0.7))
+    FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
+    dr <- range(dat$distance)
+    lines(dr, dr/(FS[1]*mod$dim$y), col=cols[1])
+    lines(dr, dr/(FS[2]*mod$dim$y), col=cols[11])
+    
+    #PLOT POLE IMAGE
+    d <- dat$distance
+    i <- round(1 + (d-min(d))*10/diff(range(d)))
+    plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=site,
+         xlab="x pixel", ylab="y pixel", 
+         sub="Shading from near camera (dark) to far", cex.sub=0.7)
+    for(p in 1:nrow(dat))
+      lines(dat[p,c("xb","xt")], -dat[p,c("yb","yt")], type="l", lwd=2, col=cols[i[p]])
+    lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
+  }
 
+  for(m in 1:length(mods)) plotmod(mods[m])
+}
 
 #cal.site#
 
