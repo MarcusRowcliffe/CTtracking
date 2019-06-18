@@ -467,7 +467,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
 read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
-                        exifcols=NULL,
+                        exifcols=if(is.null(edat)) NULL else c("Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
   trans.xy <- match.arg(trans.xy)
@@ -509,7 +509,13 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
                            df$filename)
 
     i <- match(df$filename, exifdat$SourceFile)
-    if(any(is.na(i))) stop("Can't find all digitised files in exif data - check you've supplied all the necessary data or images")
+    if(any(is.na(i))){
+      cat(df$filename[is.na(i)], sep="\n")
+      message("Warning: The above digitised files couldn't be found in exif data and were stripped out")
+      notna <- !is.na(i)
+      df <- df[notna,]
+      i <- i[notna]
+    }
     exifdat <- exifdat[i, ]
     addn <- data.frame(exifdat[, exifcols])
     names(addn) <- exifcols
@@ -613,7 +619,7 @@ make.poledat <- function(dat){
     xy <- cbind(dat[j, c("x","y")], dat[j-1, c("x","y")])
     names(xy) <- c("xb","yb","xt","yt")
     if("height" %in% names(dat))
-      xy <- cbind(xy, hb=dat$height[j], ht=dat$height[j-1])
+      xy <- cbind(xy, hb=dat$height[j], ht=dat$height[j-1], length=dat$height[j-1]-dat$height[j])
     dat <- cbind(dat[j,], xy)
     dat[, !names(dat) %in%  c("x","y","height")]
   }
@@ -799,6 +805,8 @@ plot.camcal <- function(mod){
 #  distance: actual pole distances from camera (required if cmod not provided)
 # cmod: a (list of) camera model(s); if multiple models, element names are used for matching
 # lookup: a dataframe with (at least) columns cam_id and site_id, mapping cameras to sites
+# flex: whether to include additional flexibility in the model (can be difficult to fit)
+# minpoles: threshold minimum number of poles needed to fit a model; returns NULL sitecal if less
 
 #OUTPUT
 # A list object of class sitecal (ie site calibration), describing relationship between pixel position and distance, 
@@ -809,42 +817,46 @@ plot.camcal <- function(mod){
 #  data: the data input to the model
 #  dim: the x,y pixel dimensions of the images used for calibration
 
-cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE){
+cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE, minpoles=3){
 
   cal <- function(dat, cmod=NULL){
-    dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
-    if(length(unlist(dim))>2) stop("There is more than one unique value per site for xdim and/or ydim in dat")
-    names(dim) <- c("x","y")
-    
-    xdiff <- (dat$xt-dat$xb)
-    ydiff <- (dat$yt-dat$yb)
-    dat$pixlen <- sqrt(xdiff^2 + ydiff^2)
-    dat$xg <- with(dat, xb - xdiff*hb/(ht-hb))
-    dat$yg <- with(dat, yb - ydiff*hb/(ht-hb))
-    dat$rely <- dat$yg/dim$y
-    dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
-    if(!is.null(cmod)){
-      FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
-      dat$distance <- FSratio * (dat$ht-dat$hb) * dim$y/dat$pixlen
+    if(nrow(dat)<minpoles){
+      res <- list(cam.model=NULL, site.model=NULL)
+      class(res) <- "sitecal"
     } else{
-      poledat <- data.frame(dat[, c("distance", "xt","yt","xb","yb","xdim","ydim")])
-      poledat$length <- dat$ht-dat$hb
-      cmod <- cal.cam(poledat)
+      dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
+      if(length(unlist(dim))>2) stop("There is more than one unique value per site for xdim and/or ydim in dat")
+      names(dim) <- c("x","y")
+      
+      xdiff <- (dat$xt-dat$xb)
+      ydiff <- (dat$yt-dat$yb)
+      dat$pixlen <- sqrt(xdiff^2 + ydiff^2)
+      dat$xg <- with(dat, xb - xdiff*hb/(ht-hb))
+      dat$yg <- with(dat, yb - ydiff*hb/(ht-hb))
+      dat$rely <- dat$yg/dim$y
+      dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
+      if(!is.null(cmod)){
+        FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
+        dat$distance <- FSratio * (dat$ht-dat$hb) * dim$y/dat$pixlen
+      } else{
+        poledat <- data.frame(dat[, c("distance", "xt","yt","xb","yb","xdim","ydim")])
+        poledat$length <- dat$ht-dat$hb
+        cmod <- cal.cam(poledat)
+      }
+      if(flex)
+        mod <- try(nls(distance~b1/(rely^b4-(b2+b3*relx)), data=dat, algorithm="port", 
+                     start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0, b4=1),
+                     lower=c(b1=0,b2=0,b3=-Inf,b4=0), 
+                     upper=c(b1=Inf,b2=min(dat$rely),b3=Inf,b4=Inf),
+                     trace=F )) else
+        mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
+                     start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0),
+                     lower=c(b1=0,b2=0,b3=-Inf), 
+                     upper=c(b1=Inf,b2=min(dat$rely),b3=Inf),
+                     trace=F ))
+      res <- list(cam.model=cmod, site.model=list(model=mod, data=dat, dim=dim))
+      class(res) <- "sitecal"
     }
-    if(flex)
-      mod <- try(nls(distance~b1/(rely^b4-(b2+b3*relx)), data=dat, algorithm="port", 
-                   start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0, b4=1),
-                   lower=c(b1=0,b2=0,b3=-Inf,b4=0), 
-                   upper=c(b1=Inf,b2=min(dat$rely),b3=Inf,b4=Inf),
-                   trace=F )) else
-      mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
-                   start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0),
-                   lower=c(b1=0,b2=0,b3=-Inf), 
-                   upper=c(b1=Inf,b2=min(dat$rely),b3=Inf),
-                   trace=F ))
-    
-    res <- list(cam.model=cmod, site.model=list(model=mod, data=dat, dim=dim))
-    class(res) <- "sitecal"
     res
   }
   
@@ -856,50 +868,67 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE){
       if(!all(sites %in% lookup$site_id)) stop("Not all dat$group_id values have a matching value in lookup$site_id")
       if(any(!lookup$cam_id[match(sites, lookup$site_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
       out <- lapply(sites, function(s)
-        cal(subset(dat, site_id==s), cmod[[lookup$cam_id[match(s, lookup$site_id)]]]))
+        cal(subset(dat, group_id==s), cmod[[lookup$cam_id[match(s, lookup$site_id)]]])
+      )
     }
   names(out) <- sites
+  nofits <- unlist(lapply(out, function(m) is.null(m$site.model)))
+  if(any(nofits)){
+    cat(sites[nofits], sep="\n")
+    message("Warning: The above site(s) had too few poles to fit a model")
+  }
   out
 }
-
 
 #plot.sitecal#
 
 #Show diagnostic plots for site calibration model
 
-plot.sitecal <- function(mod){
-  dim <- as.list(apply(mod$site.model$data[,c("xdim","ydim")],2,unique))
-  dat <- mod$site.model$data
-  colrange <- grey.colors(11, start=0, end=0.8)
+plot.sitecal <- function(mods){
   
-  #PLOT DISTANCE V Y-PIXEL RELATIONSHIP
-  cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
-  mxx <- max(max(dat$rely),1.5)
-  with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,mxx), ylim=c(0, 1.5*max(distance)),
-                 xlab="Relative y pixel position", ylab="Distance from camera",
-                 main=unique(dat$site_id), 
-                 sub="Shading from image left (dark) to right edge", cex.sub=0.7))
-  if(class(mod$site.model$model)=="nls"){
-    sq <- seq(0, mxx, len=100)
-    lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
-    lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
-    lines(sq, predict.r(mod$site.model$model, 0.5, sq), col=colrange[11])
+  plotmod <- function(mod){
+    site <- names(mod)
+    mod <- mod[[1]]
+    if(is.null(mod$site.model)){
+      message(paste("Model without a fit not plotted:", site, "\n"))
+    } else{
+      dim <- as.list(apply(mod$site.model$data[,c("xdim","ydim")],2,unique))
+      dat <- mod$site.model$data
+      colrange <- grey.colors(11, start=0, end=0.8)
+      
+      #PLOT DISTANCE V Y-PIXEL RELATIONSHIP
+      cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
+      mxx <- max(max(dat$rely),1.5)
+      with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,mxx), ylim=c(0, 1.5*max(distance)),
+                     xlab="Relative y pixel position", ylab="Distance from camera",
+                     main=site, 
+                     sub="Shading from image left (dark) to right edge", cex.sub=0.7))
+      if(class(mod$site.model$model)=="nls"){
+        sq <- seq(0, mxx, len=100)
+        lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
+        lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
+        lines(sq, predict.r(mod$site.model$model, 0.5, sq), col=colrange[11])
+      }
+      
+      #PLOT POLE IMAGE
+      relht <- with(dat, (1-ht) / (ht-hb))
+      xl <- with(dat, xt + relht*(xt-xb))
+      yl <- with(dat, yt + relht*(yt-yb))
+      plot(c(0, dim$xdim), -c(0, dim$ydim), 
+           asp=1, xlab="x pixel", ylab="y pixel", type="n", 
+           main=site, sub="Shading from near camera (dark) to far", cex.sub=0.7)
+      lines(c(0,rep(c(dim$xdim,0),each=2)), c(rep(c(0,-dim$ydim),each=2),0), lty=2)
+      cols <- with(dat, colrange[1+round(10*((distance-min(distance))/diff(range(distance))))])
+      for(i in 1:nrow(mod$site.model$data)){
+        with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), col=cols[i], lwd=2))
+        with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
+      }
+    }
   }
   
-  #PLOT POLE IMAGE
-  relht <- with(dat, (1-ht) / (ht-hb))
-  xl <- with(dat, xt + relht*(xt-xb))
-  yl <- with(dat, yt + relht*(yt-yb))
-  plot(c(0, dim$xdim), -c(0, dim$ydim), 
-       asp=1, xlab="x pixel", ylab="y pixel", type="n", 
-       main=unique(dat$site_id), sub="Shading from near camera (dark) to far", cex.sub=0.7)
-  lines(c(0,rep(c(dim$xdim,0),each=2)), c(rep(c(0,-dim$ydim),each=2),0), lty=2)
-  cols <- with(dat, colrange[1+round(10*((distance-min(distance))/diff(range(distance))))])
-  for(i in 1:nrow(mod$site.model$data)){
-    with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), col=cols[i], lwd=2))
-    with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
-  }
+  for(m in 1:length(mods)) plotmod(mods[m])
 }
+
 
 #DATA SUMMARY FUNCTIONS#############################################
 
@@ -931,35 +960,43 @@ predict.r <- function(mod, relx, rely){
 #INPUT
 # dat: a dataframe of digitisation data containing (at least) columns:
 #  x,y: x and y pixel positions for each digitised point
-#  xdim,ydim: x and y pixel dimensions of each image; must be consistent for each site_id
-#  site_id: site identifier
-# mod: a named list of site calibration models; names must be matched by site_id column in dat
+#  xdim,ydim: x and y pixel dimensions of each image; must be consistent for each group_id
+#  group_id: site identifier
+# mod: a named list of site calibration models; names must be matched by group_id column in dat
 
 #OUTPUT
 # A dataframe of original data with radial and angular distances from camera appended.
 
 predict.pos <- function(dat, mod){
 
-  required <- c("x","y","xdim","ydim","site_id")
+  required <- c("x","y","xdim","ydim","group_id")
   if(!all(required %in% names(dat))) 
     stop(paste("dat must contain all of these columns:", paste(required, collapse=" ")))
 
-  sites <- unique(dat$site_id)
-  if(!any(sites %in% names(mod))) stop("Not all records have a matching site calibration model")
+  sites <- unique(animdat$group_id)
+  gotmodel <- sites %in% names(smods)
+  nullmodel <- names(smods)[unlist(lapply(smods, function(m) is.null(m$site.model)))]
+  gotmodel[match(nullmodel, sites)] <- FALSE
+  if(!all(gotmodel)){
+    cat(sites[!gotmodel], sep="\n")
+    message("Warning: The above sites had no matching site calibration model and were stripped out")
+    dat <- subset(dat, group_id %in% sites[gotmodel])
+    sites <- sites[gotmodel]
+  }
 
-  multidim <- lapply(with(dat, tapply(xdim, site_id, unique)), length)>1 |
-              lapply(with(dat, tapply(ydim, site_id, unique)), length)>1
+  multidim <- lapply(with(dat, tapply(xdim, group_id, unique)), length)>1 |
+              lapply(with(dat, tapply(ydim, group_id, unique)), length)>1
   if(any(multidim)){
     message("Warning:\n There is more than one unique value per site for xdim and/or ydim in site(s):")
     cat(names(which(multidim)), sep="\n")
   }
 
   res <- lapply(sites, function(s){
-    dt <- subset(dat, site_id==s)
+    dt <- subset(dat, group_id==s)
     cm <- mod[[s]]$cam.model
     sm <- mod[[s]]$site.model$model
     data.frame(dt, radius=predict.r(sm, dt$x/dt$xdim-0.5, dt$y/dt$ydim),
-               angle=cm[[1]]$APratio * (dt$x/dt$xdim-0.5))
+               angle=cm$APratio * (dt$x/dt$xdim-0.5))
   })
   res <- bind_rows(res)
   tab <- table(res$sequence_id)
