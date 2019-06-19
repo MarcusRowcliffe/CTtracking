@@ -21,6 +21,7 @@ require(dplyr)
 
 setClass("camcal", representation("list"))
 setClass("sitecal", representation("list"))
+setClass("calibration", representation("list"))
 
 #GENERAL FUNCTIONS#############################################
 
@@ -467,7 +468,7 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
 read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
-                        exifcols=if(is.null(edat)) NULL else c("Directory", "CreateDate", "ImageHeight", "ImageWidth"),
+                        exifcols=if(is.null(exifdat)) NULL else c("Directory", "CreateDate", "ImageHeight", "ImageWidth"),
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
   trans.xy <- match.arg(trans.xy)
@@ -498,6 +499,7 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
   df$group_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
   df$sequence_id_original <- df$sequence_id
   df$sequence_id <- renumber(paste0(df$group_id, df$sequence_id))
+  if("pole_id" %in% names(df)) df$pole_id <- paste(df$pole_id, df$group_id, sep="_")
 
   if(!is.null(exifcols) | trans.xy!="none"){
     if(is.null(exifdat)) stop("exifdat must be provided if either exifcols are non-null or trans.xy (pixel translation) is specified")
@@ -756,6 +758,7 @@ cal.cam <- function(poledat){
     names(out) <- cams
   } else
     out <- list(cam=cal(poledat))
+  class(out) <- "calibration"
   out
 }
 
@@ -764,38 +767,32 @@ cal.cam <- function(poledat){
 
 #Show diagnostic plots for camera calibration model
 
-plot.camcal <- function(mods){
-  
-  plotmod <- function(mod){
-    site <- names(mod)
-    mod <- mod[[1]]
-    
-    dat <- mod$data
-    cols <- grey.colors(11, start=0, end=0.8)
-    
-    #PLOT POLE:PIXEL RATIO V DISTANCE RELATIONSHIP
-    x <- abs(dat$relx)
-    i <- round(1 + (x-min(x))*10/diff(range(x)))
-    with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=site,
-                   ylab="m/pixel", xlab="distance", 
-                   sub="Shading from image centre (dark) to edge", cex.sub=0.7))
-    FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
-    dr <- range(dat$distance)
-    lines(dr, dr/(FS[1]*mod$dim$y), col=cols[1])
-    lines(dr, dr/(FS[2]*mod$dim$y), col=cols[11])
-    
-    #PLOT POLE IMAGE
-    d <- dat$distance
-    i <- round(1 + (d-min(d))*10/diff(range(d)))
-    plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=site,
-         xlab="x pixel", ylab="y pixel", 
-         sub="Shading from near camera (dark) to far", cex.sub=0.7)
-    for(p in 1:nrow(dat))
-      lines(dat[p,c("xb","xt")], -dat[p,c("yb","yt")], type="l", lwd=2, col=cols[i[p]])
-    lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
-  }
+plot.camcal <- function(mod){
+  cam <- unique(mod$data$group_id)
 
-  for(m in 1:length(mods)) plotmod(mods[m])
+  dat <- mod$data
+  cols <- grey.colors(11, start=0, end=0.8)
+  
+  #PLOT POLE:PIXEL RATIO V DISTANCE RELATIONSHIP
+  x <- abs(dat$relx)
+  i <- round(1 + (x-min(x))*10/diff(range(x)))
+  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=site,
+                 ylab="m/pixel", xlab="distance", 
+                 sub="Shading from image centre (dark) to edge", cex.sub=0.7))
+  FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
+  dr <- range(dat$distance)
+  lines(dr, dr/(FS[1]*mod$dim$y), col=cols[1])
+  lines(dr, dr/(FS[2]*mod$dim$y), col=cols[11])
+  
+  #PLOT POLE IMAGE
+  d <- dat$distance
+  i <- round(1 + (d-min(d))*10/diff(range(d)))
+  plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=cam,
+       xlab="x pixel", ylab="y pixel", 
+       sub="Shading from near camera (dark) to far", cex.sub=0.7)
+  for(p in 1:nrow(dat))
+    lines(dat[p,c("xb","xt")], -dat[p,c("yb","yt")], type="l", lwd=2, col=cols[i[p]])
+  lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
 }
 
 #cal.site#
@@ -884,6 +881,7 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE, minpoles=3){
     cat(sites[nofits], sep="\n")
     message("Warning: The above site(s) had too few poles to fit a model")
   }
+  class(out) <- "calibration"
   out
 }
 
@@ -891,51 +889,53 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE, minpoles=3){
 
 #Show diagnostic plots for site calibration model
 
-plot.sitecal <- function(mods){
-  
-  plotmod <- function(mod){
-    site <- names(mod)
-    mod <- mod[[1]]
-    if(is.null(mod$site.model)){
-      message(paste("Model without a fit not plotted:", site, "\n"))
-    } else{
-      dim <- as.list(apply(mod$site.model$data[,c("xdim","ydim")],2,unique))
-      dat <- mod$site.model$data
-      colrange <- grey.colors(11, start=0, end=0.8)
-      
-      #PLOT DISTANCE V Y-PIXEL RELATIONSHIP
-      cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
-      mxx <- max(max(dat$rely),1.5)
-      with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,mxx), ylim=c(0, 1.5*max(distance)),
-                     xlab="Relative y pixel position", ylab="Distance from camera",
-                     main=site, 
-                     sub="Shading from image left (dark) to right edge", cex.sub=0.7))
-      if(class(mod$site.model$model)=="nls"){
-        sq <- seq(0, mxx, len=100)
-        lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
-        lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
-        lines(sq, predict.r(mod$site.model$model, 0.5, sq), col=colrange[11])
-      }
-      
-      #PLOT POLE IMAGE
-      relht <- with(dat, (1-ht) / (ht-hb))
-      xl <- with(dat, xt + relht*(xt-xb))
-      yl <- with(dat, yt + relht*(yt-yb))
-      plot(c(0, dim$xdim), -c(0, dim$ydim), 
-           asp=1, xlab="x pixel", ylab="y pixel", type="n", 
-           main=site, sub="Shading from near camera (dark) to far", cex.sub=0.7)
-      lines(c(0,rep(c(dim$xdim,0),each=2)), c(rep(c(0,-dim$ydim),each=2),0), lty=2)
-      cols <- with(dat, colrange[1+round(10*((distance-min(distance))/diff(range(distance))))])
-      for(i in 1:nrow(mod$site.model$data)){
-        with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), col=cols[i], lwd=2))
-        with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
-      }
+plot.sitecal <- function(mod){
+  site <- unique(mod$site.model$data$group_id)
+
+  if(is.null(mod$site.model)){
+    message(paste("Model without a fit not plotted:", site, "\n"))
+  } else{
+    dim <- as.list(apply(mod$site.model$data[,c("xdim","ydim")],2,unique))
+    dat <- mod$site.model$data
+    colrange <- grey.colors(11, start=0, end=0.8)
+    
+    #PLOT DISTANCE V Y-PIXEL RELATIONSHIP
+    cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
+    mxx <- max(max(dat$rely),1.5)
+    with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,mxx), ylim=c(0, 1.5*max(distance)),
+                   xlab="Relative y pixel position", ylab="Distance from camera",
+                   main=site, 
+                   sub="Shading from image left (dark) to right edge", cex.sub=0.7))
+    if(class(mod$site.model$model)=="nls"){
+      sq <- seq(0, mxx, len=100)
+      lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
+      lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
+      lines(sq, predict.r(mod$site.model$model, 0.5, sq), col=colrange[11])
+    }
+    
+    #PLOT POLE IMAGE
+    relht <- with(dat, (1-ht) / (ht-hb))
+    xl <- with(dat, xt + relht*(xt-xb))
+    yl <- with(dat, yt + relht*(yt-yb))
+    plot(c(0, dim$xdim), -c(0, dim$ydim), 
+         asp=1, xlab="x pixel", ylab="y pixel", type="n", 
+         main=site, sub="Shading from near camera (dark) to far", cex.sub=0.7)
+    lines(c(0,rep(c(dim$xdim,0),each=2)), c(rep(c(0,-dim$ydim),each=2),0), lty=2)
+    cols <- with(dat, colrange[1+round(10*((distance-min(distance))/diff(range(distance))))])
+    for(i in 1:nrow(mod$site.model$data)){
+      with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), col=cols[i], lwd=2))
+      with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
     }
   }
-  
-  for(m in 1:length(mods)) plotmod(mods[m])
 }
 
+#plot.calibration#
+
+#Show diagnostic plots for site calibration model
+
+plot.calibration <- function(mods){
+  lapply(mods, plot)
+}
 
 #DATA SUMMARY FUNCTIONS#############################################
 
