@@ -709,13 +709,34 @@ make.poledat <- function(dat){
 
 #CALIBRATION FUNCTIONS#############################################
 
+#make.camtable#
+
+#Make a lookup table matching sites to camera from a digitisation dataframe
+
+#INPUT
+# dat: a dataframe created using read.digidat containing camera information from image metadata
+# camcolumns: a vector of column headings used to create camera categories
+
+#OUTPUT
+#A dataframe with columns site_id and cam_id, indicating which camera category 
+#was deployed at each site
+make.camtable <- function(dat, camcolumns=c("Make", "Model", "Megapixels")){
+  if(!all(camcolumns %in% names(dat))) stop("Supplied columns do not all exist in dat column headings")
+  cat <- caldat[, camcolumns]
+  if(class(cat)=="data.frame") cat <- apply(cat, 1, paste, collapse="_")
+  tab <- table(caldat$group_id, cat)
+  i <- apply(tab, 1, function(x) which(x>0))
+  if(class(i)!="integer") stop("Some deployments have more than one camera category")
+  data.frame(site_id=unique(caldat$group_id), cam_id=colnames(tab)[i])
+}
+
 
 #cal.cam#
 
 #Creates a camera calibration model
 
 #INPUT
-#poledat: data frame of pole digitisation data with (at least) columns:
+# poledat: data frame of pole digitisation data with (at least) columns:
 # distance: pole distances from camera
 # length: pole lengths
 # xt,yt,xb,yb: x,y pixel positions of pole tops (t) and bases (b) in image
@@ -776,7 +797,7 @@ plot.camcal <- function(mod){
   #PLOT POLE:PIXEL RATIO V DISTANCE RELATIONSHIP
   x <- abs(dat$relx)
   i <- round(1 + (x-min(x))*10/diff(range(x)))
-  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=site,
+  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=cam,
                  ylab="m/pixel", xlab="distance", 
                  sub="Shading from image centre (dark) to edge", cex.sub=0.7))
   FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
