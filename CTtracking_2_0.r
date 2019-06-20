@@ -454,7 +454,8 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 #    a dataframe containing the appropriate metadata
 # annotations: a character vector of column names to give to annotations from the digitisation data
 # pair: whether or not to pair up paired pole digitisation points for calibration (leave as FALSE for animal points)
-# exifcols: data columns from image metadata to add to the merged dataframe; specify NULL to suppress.
+# exifcols: data columns from exifdata to add to the merged dataframe, in addition
+#           to defaults (Directory, CreateDate, ImageHeight and ImageWidth).
 # trans.xy: type of pixel translation to apply, with options:
 #   "none": no translation
 #   "img.to.vid": all image file pixel positions are translated to the video scale
@@ -468,11 +469,11 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
 read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
-                        exifcols=if(is.null(exifdat)) NULL else c("Directory", "CreateDate", "ImageHeight", "ImageWidth"),
+                        exifcols=NULL,
                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
   trans.xy <- match.arg(trans.xy)
-
+  
   files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
   if(length(files)==0) stop("No csv files found in path")
   df.list <- lapply(files, read.csv, stringsAsFactors=FALSE)
@@ -501,8 +502,10 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
   df$sequence_id <- renumber(paste0(df$group_id, df$sequence_id))
   if("pole_id" %in% names(df)) df$pole_id <- paste(df$pole_id, df$group_id, sep="_")
 
-  if(!is.null(exifcols) | trans.xy!="none"){
-    if(is.null(exifdat)) stop("exifdat must be provided if either exifcols are non-null or trans.xy (pixel translation) is specified")
+  if(!is.null(exifdat) | trans.xy!="none"){
+    if(is.null(exifdat)) stop("exifdat must be provided if trans.xy (pixel translation) is specified")
+    
+    exifcols <- unique(c("Directory", "CreateDate", "ImageHeight", "ImageWidth", exifcols))
     if(is.character(exifdat)) exifdat <- read.exif(exifdat)
     dirs <- tools::file_path_sans_ext(basename(files))
     if(any(!dirs %in% basename(exifdat$Directory))) stop("Not all csv filenames have matching image directories")
@@ -1090,14 +1093,19 @@ seq.summary <- function(dat){
     dat <- seq.data(dat)
     pixdiff <- with(dat, tapply(pixdiff, sequence_id, sum, na.rm=T) )
     mvdist <- with(dat, tapply(displacement, sequence_id, sum, na.rm=T) )
-    
     tm <- strptime(dat$CreateDate, format="%Y:%m:%d %H:%M:%S", tz="UTC")
     mvtime <- tapply(tm, dat$sequence_id, function(x) as.numeric(diff(range(x)), units="secs"))
+    i <- n>1 & n<11
+    mntime <- sum(mvtime[i]) / (sum(n) - length(n))
+    time <- mvtime
+    time[i] <- mntime * (n[i]-1)
+    
     cbind(dat[dat$imgcount==1, !(names(dat) %in% c("imgcount","pixdiff","displacement","d.angle"))],
           pixdiff=pixdiff,
           dist=mvdist,
-          time=mvtime,
-          speed=mvdist/mvtime,
+          timediff=mvtime,
+          time=time,
+          speed=mvdist/time,
           frames=n
     )
   }
