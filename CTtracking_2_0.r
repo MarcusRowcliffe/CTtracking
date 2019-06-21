@@ -903,7 +903,7 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE, minpoles=3){
   nofits <- unlist(lapply(out, function(m) is.null(m$site.model)))
   if(any(nofits)){
     cat(sites[nofits], sep="\n")
-    message("Warning: The above site(s) had too few poles to fit a model")
+    message("Warning: The above deployment(s) had too few poles to fit a model")
   }
   class(out) <- "calibration"
   out
