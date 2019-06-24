@@ -666,7 +666,7 @@ make.poledat <- function(dat){
   
   tab <- table(dat$pole_id)
   i <- dat$pole_id %in% names(tab)[tab==1]
-  res <- pairup(dat[!i, ])  
+  if(nrow(dat)>0) res <- pairup(dat[!i, ]) else res <- NULL
   if("height" %in% names(dat)){
     duff4 <- res$hb>=res$ht
     names(duff4) <- res$pole_id
@@ -685,7 +685,7 @@ make.poledat <- function(dat){
     solos2$y <- solos$y-predict(mod, newdata=nd)
     res <- rbind(res, pairup(rbind(solos,solos2)))
   }
-  res <- res[order(res$pole_id), ]
+  if(!is.null(res)) res <- res[order(res$pole_id), ]
   
   if(any(duff1 | duff2 | duff3) | any(duff4)){
     message("Warning:\n Some poles were discarded because they...")
