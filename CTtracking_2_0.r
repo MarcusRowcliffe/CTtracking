@@ -507,12 +507,18 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
     
     exifcols <- unique(c("Directory", "CreateDate", "ImageHeight", "ImageWidth", exifcols))
     if(is.character(exifdat)) exifdat <- read.exif(exifdat)
-    dirs <- tools::file_path_sans_ext(basename(files))
-    if(any(!dirs %in% basename(exifdat$Directory))) stop("Not all csv filenames have matching image directories")
-    df$filename <- file.path(dirname(exifdat$Directory[1]),
-                           rep(dirs, unlist(lapply(df.list, nrow))),
-                           df$filename)
-
+    dirs <- tools::file_path_sans_ext(basename(files)) #unique dirs digitised
+    exifdirs <- unique(basename(exifdat$Directory)) #unique dirs in image exifdat
+    missingdirs <- dirs[!dirs %in% exifdirs] #unique dirs in digidat but not in exif dat
+    digidirs <- rep(dirs, unlist(lapply(df.list, nrow))) #row-by-row dirs in digidat
+    df$filename <- file.path(dirname(exifdat$Directory[1]), digidirs, df$filename)
+    
+    if(length(missingdirs)>0){
+      cat(paste0(missingdirs,".csv"), sep="\n")
+      message("Warning: The above csv files have no matching image directories in exifdat.\nTheir data were stripped out")
+      df <- subset(df, !digidirs %in% missingdirs)
+    }
+    
     i <- match(df$filename, exifdat$SourceFile)
     if(any(is.na(i))){
       cat(df$filename[is.na(i)], sep="\n")
@@ -529,6 +535,7 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
       df$TimeOfDay <- decimal.time(df$CreateDate)
     rownames(df) <- 1:nrow(df)
   }
+  if(nrow(df)==0) stop("No data useable data found!")
 
   if(trans.xy=="none"){
     df$xdim <- exifdat$ImageWidth
