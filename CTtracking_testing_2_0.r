@@ -1,4 +1,4 @@
-source("C:/path/containing/CodeFile/CTtracking_2_0.r")
+source("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/CTtracking_2_0.r")
 
 #####################
 #Code to convert "," in sequence_annotations column to ";"
@@ -12,29 +12,31 @@ read1 <- function(file){
   names(dat) <- hds
   dat
 }
-path <- "C:/path/containing/TrackingCSVfiles/..."
-ff <- list.files(pth, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
+path <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool/AndreLanna/Processing example data/A200"
+ff <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
 flist <- lapply(ff, read1)
+names(flist) <- ff
 for(f in ff) write.csv(flist[[f]], f, row.names=F)
 
 ######################
 #DATA PROCESSING STEPS
 
 #Define paths to images, animal/calibration tracking data
-imgpath <- "C:/path/containing/ImageFiles/..."
+imgpath <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool/AndreLanna/Processing example data/A200/A200/A200_2"
 animpath <- "C:/path/containing/TrackingCSVfiles/..."
-calpath <- "C:/path/containing/TrackingCSVfiles/..."
+calpath <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool/AndreLanna/Processing example data/test2"
 
 #Extract metadat from images
 edat <- read.exif(imgpath)
+edat <- read.csv("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool/AndreLanna/Processing example data/test2/metadata/edat.csv")
 
 #Create calibration pole digitisation data
-cdat <- read.digidat(calpth, edat, annotations=c("height", "distance"))
-cdat <- make.poledat(cdat)
+cdat <- read.digidat(calpath, edat, flatten=TRUE, annotations=c("height", "distance"))
+View(cdat)
 
 #Fite site calibration models and check diagnostic plots
 smods <- cal.site(cdat)
-for(m in 1:length(smods)) plot.sitecal(smods[[m]])#
+for(m in 1:length(smods)) plot.sitecal(smods[[m]])
 
 #Create animal digitisation data
 posdat <- read.digidat(animpath, edat, annotations=c("species"), trans.xy="img.to.vid")
@@ -56,3 +58,4 @@ View(cdat)
 View(posdat)
 View(cntctdat)
 View(seqdat)
+
