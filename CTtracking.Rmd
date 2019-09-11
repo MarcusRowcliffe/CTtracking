@@ -4,9 +4,9 @@ title: Protocol for generating distance data from camera trap images using a sim
 author: "Marcus Rowcliffe"
 date: "20 June 2019"
 output:
-  word_document: default
   pdf_document: default
   html_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -48,7 +48,7 @@ for(i in 1:2){
 
 2. On an open arena, mark out at least nine positions at a range of different radial and angular distances from the camera, measuring the distances from camera accurately. Fig. 2 gives an example of placement positions, with poles at three distances (1, 2 and 4 m), and a range of angles. It's not necessary to measure angle, but it should be variable, and within the camera's field of view (usually about 20 degrees either side of the mid line, but you may need to check the effective field of view for your camera and setting). If using a static pole array, firmly fix a pole at each position.
 
-![Fig. 2. Diagram of an example layout for a camera calibration pole grid.](C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool/camera calibration diagram.jpg)
+![Fig. 2. Diagram of an example layout for a camera calibration pole grid.](C:/Users/rowcliffe.m/Documents/OneDriveZSL/CameraTrapping/REM/Calibration/Mytool/camera_calibration_diagram.jpg)
 
 
 3. With a camera positioned in front of the arena and armed, either take one image of the static pole array, or take one image of the moveble pole at each position on the array. In the latter case, holding up some visible marker of the distance. For example, in Fig. 1b, the pole is placed at 2 m from the camera, with distance indicated by fingers displayed. 
@@ -109,9 +109,9 @@ Separate the entries with semicolons. For example, in Fig. 1b, the pole is 2 m f
 ```{r include=FALSE}
 setwd("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking")
 ```
-The CTtracking package is under development and not (yet) available on CRAN. Downnload the code file CTtracking_2_0.r from <https://github.com/MarcusRowcliffe/CTtracking>, and load it, (first adding full path to the file name, or setting the working directory):
+The CTtracking package is under development and not (yet) available on CRAN. Downnload the code file CTtracking.r from <https://github.com/MarcusRowcliffe/CTtracking>, and load it, (first adding full path to the file name, or setting the working directory):
 ```{r message=FALSE}
-source("CTtracking_2_0.r")
+source("CTtracking.r")
 ```
 
 ### Fitting camera calibration models
