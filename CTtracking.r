@@ -1,3 +1,5 @@
+#V0.1
+
 #NOTES ON PREPARING FILES####
 
 #Before digitising, ensure that images are organised into placement_specific folders, 

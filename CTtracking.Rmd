@@ -1,6 +1,6 @@
 ---
 title: Protocol for generating distance data from camera trap images using a simple
-  computer vision approach
+  computer vision approach, CTtracking V0.1
 author: "Marcus Rowcliffe"
 date: "20 June 2019"
 output:

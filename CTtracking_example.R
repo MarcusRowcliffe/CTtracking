@@ -1,3 +1,5 @@
+#Using V0.1 (Robin Freeman version of Animaltracker)
+
 source("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/CTtracking_2_0.r")
 
 path <- "D:/Survey_xxx"
