@@ -51,6 +51,9 @@ setClass("calibration", representation("list"))
 
 read.exif <- function(inpath, outpath=inpath, toolpath="C:/Exiftool", return=TRUE, write=FALSE, recursive=TRUE){
   wd <- getwd()
+  qq <- strsplit(inpath, "")[[1]]
+  if(qq[1]==".") inpath <- paste0(wd, paste0(qq[-1], collapse=""))
+  
   setwd(toolpath)
   outfile <- paste0(outpath, "/metadata.csv")
   outf <- paste0("\"", outfile, "\"")
@@ -404,36 +407,6 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 #DATA PREP FUNCTIONS#############################################
 
 
-#split.annotations#
-
-#Splits out multi-field annotations entered as a single field
-
-#INPUT
-# dat: a vector of data containing multiple field separated by a given character, sep
-# colnames: a vector of the names to assign to output columns
-# sep: the character defining field breaks within dat
-
-#OUTPUT
-# A dataframe with one column per field from the input data. The function fails if not all 
-# entries in dat have the same number of sep characters (implying different numbers of columns),
-# or if the number of colnames doesn't equal the number of columns in dat.
-split.annotations <- function(dat, colnames=NULL, sep=";"){
-  lst <- strsplit(as.character(dat), sep)
-  seps <- unique(unlist(lapply(lst, length)))
-  
-  if(length(seps)>1) stop("Not all annotations have the same number of entries")
-  if(is.null(colnames)) colnames <- paste0("X",1:seps) else
-  if(seps!=length(colnames))
-    stop("Number of column names is not equal to the number of annotations")
-  
-  d <- data.frame(Reduce(rbind, lst), stringsAsFactors=F)
-  d <- type.convert(d, as.is=T)
-  names(d) <- colnames
-  rownames(d) <- NULL
-  d
-}
-
-
 #read.digidat#
 
 #Reads and merges csv files of digitisation data from animaltracker tool.
@@ -448,7 +421,8 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 #  not NULL) image exif data are needed from the digitised images. In this case, EITHER exifdat must
 #  be provided, OR the necessary images must be present within (sub-directories of) path and the
 #  function will read exif data from there.
-#- IMPORTANT: where image metadata are accessed, all images must have unique names.
+#- IMPORTANT: where images from different directories may not have unique names,
+#  exifdata must be provided for cross-referencing.
 
 #INPUT
 # path: name of directory containing all required files (see above).
@@ -470,10 +444,12 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
 # Optionally, x,y values are translated from image to video scale or vice versa, with original
 # x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
 # input are added from the image metadata.
-read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
-                        exifcols=NULL,
-                        trans.xy=c("none", "img.to.vid", "vid.to.img")){
+
+read.digidat <- function(path, exifdat=NULL, exifcols=NULL,
+                         datatype=c("pole", "animal", "both"),
+                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
+  datatype <- match.arg(datatype)
   trans.xy <- match.arg(trans.xy)
   
   files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
@@ -491,40 +467,37 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
     message("Error: Not all files have the same column headings - check output data")
     return(data.frame(file=basename(files), t(colnames)))
   }
-  classes <- unlist(lapply(df.list, function(df) class(df$sequence_annotation)))
-  if(length(unique(classes))>1){
-    message("Error: Sequence annotation classes are not consistent across files - check output data")
-    return(data.frame(file=basename(files), seq_ann_class=classes))
-  }
-  
+
   df <- bind_rows(df.list)
-  df <- cbind(df, split.annotations(df$sequence_annotation, annotations))
-  df$group_id <- rep(sub(".csv", "", basename(files)), unlist(lapply(df.list, nrow)))
+  if("height" %in% names(df))
+    df$height <- as.numeric(df$height) else
+    if(datatype!="animal")
+      stop("If data contains pole digitisations, input must contain a column named height")
+    
+  dirs <- tools::file_path_sans_ext(basename(files)) #unique dirs digitised
+  df$group_id <- rep(dirs, unlist(lapply(df.list, nrow)))
   df$sequence_id_original <- df$sequence_id
   df$sequence_id <- renumber(paste0(df$group_id, df$sequence_id))
-  if("pole_id" %in% names(df)) df$pole_id <- paste(df$pole_id, df$group_id, sep="_")
 
   if(!is.null(exifdat) | trans.xy!="none"){
     if(is.null(exifdat)) stop("exifdat must be provided if trans.xy (pixel translation) is specified")
     
     exifcols <- unique(c("Directory", "CreateDate", "ImageHeight", "ImageWidth", exifcols))
     if(is.character(exifdat)) exifdat <- read.exif(exifdat)
-    dirs <- tools::file_path_sans_ext(basename(files)) #unique dirs digitised
     exifdirs <- unique(basename(exifdat$Directory)) #unique dirs in image exifdat
     missingdirs <- dirs[!dirs %in% exifdirs] #unique dirs in digidat but not in exif dat
-    digidirs <- rep(dirs, unlist(lapply(df.list, nrow))) #row-by-row dirs in digidat
-    df$filename <- file.path(dirname(exifdat$Directory[1]), digidirs, df$filename)
+    df$filename <- file.path(dirname(exifdat$Directory[1]), df$group_id, df$image_name)
     
     if(length(missingdirs)>0){
       cat(paste0(missingdirs,".csv"), sep="\n")
       message("Warning: The above csv files have no matching image directories in exifdat.\nTheir data were stripped out")
-      df <- subset(df, !digidirs %in% missingdirs)
+      df <- subset(df, !df$group_id %in% missingdirs)
     }
     
     i <- match(df$filename, exifdat$SourceFile)
     if(any(is.na(i))){
       cat(df$filename[is.na(i)], sep="\n")
-      message("Warning: The above digitised files couldn't be found in exif data and were stripped out")
+      message("Warning: The above digitised images couldn't be found in exif data and were stripped out")
       notna <- !is.na(i)
       df <- df[notna,]
       i <- i[notna]
@@ -563,8 +536,14 @@ read.digidat <- function(path, exifdat=NULL, annotations=NULL, pair=FALSE,
     }
   }
   
-  if(pair) df <- make.poledat(df)
-  df
+  res <- switch(datatype,
+                "animal" = res <- df,
+                "pole" = make.poledat(df),
+                "both" = list(animal=subset(df, name!=""), 
+                              pole=make.poledat(subset(df, !is.na(height)))
+                              )
+  )
+  res
 }
 
 
@@ -722,6 +701,7 @@ make.poledat <- function(dat){
 #CALIBRATION FUNCTIONS#############################################
 
 #make.camtable#
+#MAYBE CUT THIS ONE
 
 #Make a lookup table matching sites to camera from a digitisation dataframe
 
@@ -730,7 +710,7 @@ make.poledat <- function(dat){
 # camcolumns: a vector of column headings used to create camera categories
 
 #OUTPUT
-#A dataframe with columns site_id and cam_id, indicating which camera category 
+#A dataframe with columns deploy_id and cam_id, indicating which camera category 
 #was deployed at each site
 make.camtable <- function(dat, camcolumns=c("Make", "Model", "Megapixels")){
   if(!all(camcolumns %in% names(dat))) stop("Supplied columns do not all exist in dat column headings")
@@ -739,7 +719,7 @@ make.camtable <- function(dat, camcolumns=c("Make", "Model", "Megapixels")){
   tab <- table(caldat$group_id, cat)
   i <- apply(tab, 1, function(x) which(x>0))
   if(class(i)!="integer") stop("Some deployments have more than one camera category")
-  data.frame(site_id=unique(caldat$group_id), cam_id=colnames(tab)[i])
+  data.frame(deploy_id=unique(caldat$group_id), cam_id=colnames(tab)[i])
 }
 
 
@@ -841,7 +821,7 @@ plot.camcal <- function(mod){
 #  xdim, ydim: x and y dimensions of each image
 #  distance: actual pole distances from camera (required if cmod not provided)
 # cmod: a (list of) camera model(s); if multiple models, element names are used for matching
-# lookup: a dataframe with (at least) columns cam_id and site_id, mapping cameras to sites
+# lookup: a dataframe with (at least) columns cam_id and deploy_id, mapping cameras to deployments
 # flex: whether to include additional flexibility in the model (can be difficult to fit)
 # minpoles: threshold minimum number of poles needed to fit a model; returns NULL sitecal if less
 
@@ -902,10 +882,10 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE, minpoles=3){
     out <- lapply(sites, function(s) cal(subset(dat, group_id==s)))
     } else{
       if(is.null(lookup)) stop("Site-camera lookup table must be provided if camera models are specified")
-      if(!all(sites %in% lookup$site_id)) stop("Not all dat$group_id values have a matching value in lookup$site_id")
-      if(any(!lookup$cam_id[match(sites, lookup$site_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
+      if(!all(sites %in% lookup$deploy_id)) stop("Not all dat$group_id values have a matching value in lookup$deploy_id")
+      if(any(!lookup$cam_id[match(sites, lookup$deploy_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
       out <- lapply(sites, function(s)
-        cal(subset(dat, group_id==s), cmod[[lookup$cam_id[match(s, lookup$site_id)]]])
+        cal(subset(dat, group_id==s), cmod[[lookup$cam_id[match(s, lookup$deploy_id)]]])
       )
     }
   names(out) <- sites
@@ -1013,7 +993,7 @@ predict.pos <- function(dat, mod){
   if(!all(required %in% names(dat))) 
     stop(paste("dat must contain all of these columns:", paste(required, collapse=" ")))
 
-  sites <- unique(animdat$group_id)
+  sites <- unique(dat$group_id)
   gotmodel <- sites %in% names(smods)
   nullmodel <- names(smods)[unlist(lapply(smods, function(m) is.null(m$site.model)))]
   gotmodel[match(nullmodel, sites)] <- FALSE
@@ -1104,8 +1084,8 @@ seq.summary <- function(dat){
     mvdist <- with(dat, tapply(displacement, sequence_id, sum, na.rm=T) )
     tm <- strptime(dat$CreateDate, format="%Y:%m:%d %H:%M:%S", tz="UTC")
     mvtime <- tapply(tm, dat$sequence_id, function(x) as.numeric(diff(range(x)), units="secs"))
-    i <- n>1 & n<11
-    mntime <- sum(mvtime[i]) / (sum(n) - length(n))
+    i <- n<11
+    mntime <- sum(mvtime[i]) / (sum(n[i]) - sum(i))
     time <- mvtime
     time[i] <- mntime * (n[i]-1)
     
