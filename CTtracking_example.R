@@ -2,8 +2,6 @@
 
 source("CTtracking.r")
 
-path <- "C:/Users/rowcliffe.m/Documents/OneDriveZSL/GitHub/CTtracking/Survey_yyy"
-
 exifdat.cam <- read.exif("./Survey_yyy/CameraImages")
 
 camdat <- read.digidat("./Survey_yyy/CameraData", 
@@ -13,6 +11,7 @@ View(camdat)
 cmods <- cal.cam(camdat)
 plot(cmods)
 
+#Do this first time
 exifdat <- read.exif("./Survey_yyy/DeploymentImages")
 write.csv(exifdat, "./Survey_yyy/exifdata.csv", row.names = FALSE)
 
@@ -24,7 +23,7 @@ depdat <- read.digidat(path="./Survey_yyy/DeploymentData",
 View(depdat$animal)
 View(depdat$pole)
 
-deptab <- read.csv("./Survey_yyy/deptab.csv", colClasses = "character")
+deptab <- read.csv("./Survey_yyy/deptable.csv")
 
 View(deptab)
 smods <- cal.site(depdat$pole, cmods, deptab)

@@ -4,8 +4,8 @@ title: Protocol for generating distance data from camera trap images using a sim
 author: "Marcus Rowcliffe"
 date: "18 November 2019"
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
   word_document: default
 ---
 
@@ -15,6 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Background
 The random encounter model, distance sampling and related methods require data on animal positions relative to camera in order to estimate camera detection zone size and (for REM) animal speed of movement. This vignette sets out a process for generating animal position and speed data from camera trap images using:  
+
 1. Images of calibration objects to inform computer vision models;
 
 2. The html tool **animaltracker** to digitise images (see <https://lauravzarco.github.io/animaltracker>);  
@@ -33,12 +34,14 @@ The goal is to take pictures of objects of known size at a range of known distan
 
 3. With a camera positioned in front of the arena and armed, take one image of the pole at each position on the array, holding up some visible marker of the distance. For example, in Fig. 1, the pole is placed at 2 m from the camera, with distance indicated in metres by the number of fingers displayed. 
 
-```{r echo=FALSE, fig.cap="Fig. 1. Example image of a camera calibration pole in position 2 m from the camera.", out.width="60%", fig.align="center"}
+
+```{r echo=FALSE, fig.cap="Example image of a camera calibration pole in position 2 m from the camera.", out.width="60%", fig.align="center"}
 pth <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool/Reconyx PC800 calibration images/IMG_0029.JPG"
 knitr::include_graphics(pth)
 ```
 
-```{r echo=FALSE, fig.cap="Fig. 2. Diagram of an example layout for a camera calibration pole grid.", out.width="60%", fig.align="center"}
+
+```{r echo=FALSE, fig.cap="Diagram of an example layout for a camera calibration pole grid.", out.width="60%", fig.align="center"}
 th <- c(70, 90, 110)*pi/180
 rr <- c(1,2,4)
 dat <- expand.grid(rr,th)
@@ -65,14 +68,16 @@ The goal is to take images of calibration poles in the field, as above but witho
 
 2.	Starting about 1m directly in front of the camera, hold the pole vertically with its base on the ground so that it is clearly visible by the camera, and held still long enough to ensure a clear image (generally a few seconds). Fig. 3 shows an example of a resulting image.
 
-3.	Repeat this for further pole placements across the field of view and away from the camera with placements spaced about 1 m apart. Continue away from the camera to the maximum extent that any animals are likely to be captured, or if possible a bit beyond. As you reach greater distances, it may help to have second person next to the camera to keep it triggering. Aim for 10-20 placements, with more if visibility is greater. Fig. 4 shows an ideal configuration of deployment calibration pole placements.
+3.	Repeat this for further pole placements across the field of view and away from the camera with placements spaced about 1 m apart. Continue away from the camera to the maximum extent that any animals are likely to be captured, or if possible a bit beyond. As you reach greater distances, it may help to have a second person next to the camera to keep it triggering. Aim for 10-20 placements, perhaps more if visibility is very good Fig. 4 shows an example configuration of deployment calibration pole placements.
 
-```{r echo=FALSE, fig.cap="Fig. 3. Example image of a deployment calibration pole placement.", out.width="60%", fig.align="center"}
-pth <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/Survey_yyy/DeploymentImages/01/IMG_0096.JPG"
+
+```{r echo=FALSE, fig.cap="Example image of a deployment calibration pole placement.", out.width="60%", fig.align="center"}
+pth <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/Survey_yyy/DeploymentImages/Site01/IMG_0096.JPG"
 knitr::include_graphics(pth)
 ```
 
-```{r echo=FALSE, fig.cap="Fig. 4. Diagram of an example set of pole locations for a deployment calibration.", out.width="60%", fig.align="center"}
+
+```{r echo=FALSE, fig.cap="Diagram of an example set of pole locations for a deployment calibration. Note this can be set out without measuring anything.", out.width="60%", fig.align="center"}
 th <- c(70, 90, 110)*pi/180
 rr <- seq(0.5, 3.5, 0.5)
 dat <- expand.grid(rr,th)
@@ -108,12 +113,12 @@ text(0,0,"Camera", pos=2, col="darkred")
 
 5. When finished digitising a set of images, click *Export CSV* -> *Open* -> *OK* -> save the resulting file to the the relevant directory with an informative name (see below on organising and naming different types of data). If you need to take a break and shut down before completing a set of images, make a note of the last image digitised. Then, when re-starting, open images from that point for the next session, export the csv file as above when ready, and cut and paste the resulting data into the partially completed csv file created earlier.
 
-6. To start a new image directory, refresh your browser and repeat from step 2.
+6. To start a new image directory, refresh your browser and repeat from step 3.
 
 
 ### Camera calibration
 
-1. For each pole, digitise two points a known height above ground, each as a new single-point sequence, and for each recording the following: 
+1. For each pole, digitise two points a known height above ground, each as a new single-point sequence, and for each recording the following:
   * distance from camera in metres, in a new field called "distance"; 
   * height of digitised point in metres, in a new field called "height".
   
@@ -132,11 +137,15 @@ text(0,0,"Camera", pos=2, col="darkred")
 
 2. If the animal is only partially visible, digitise the position on the canvas outside the image itself. To do this, you may need to move or zoom the image to make space on the canvas. Fig. 7 shows an example of this.
 
-3. At least the first position of every individual animal sequence should be digitised, but it is not necessary to digitise every subsequent image if the animal becomes increasingly distant and/or hard to locate with certainty.
+3. At least the first position of every individual animal sequence should be digitised, but it is not necessary to digitise every subsequent image. Only digitise movement sequences if:
+  * the animal shows significant change in position over the sequence; AND for as long as:
+  * the animal is continually observed with no more than 2 seconds or so between images; AND
+  * the animal's position is reasonably easy to locate within the image.
 
 4. During digitisations, look out for moments at which the camera clearly changes its orientation. It may be necessary to truncate the deployment at that time, as positions for any points digitised after that cannot be accurately estimated unless there has been a subsequent set of calibration images taken that apply to that period. If you know there have been no applicable pole images taken, the deployment end time will need to be updated to the point at which the shift is first seen, and there is no need to digitise any further animal positions. If on the other hand there has been a cubsequent set of calibration images taken, you will need to create a new deployment, separating the images into separate folders and creating separate digitisation data files.
 
-```{r echo=FALSE, fig.cap="Fig. 7. Animaltracker screenshot, showing the first image of a sequence with the animal only partially visible, and the subsequently digitised track showing.", out.width="100%", fig.align="center"}
+
+```{r echo=FALSE, fig.cap="Animaltracker screenshot, showing the first image of a sequence with the animal only partially visible, and the subsequently digitised track showing.", out.width="100%", fig.align="center"}
 pth <- "animaltracker_screenshot.jpg"
 knitr::include_graphics(pth)
 ```
@@ -149,9 +158,9 @@ source("CTtracking.r")
 ```
 
 ### Fitting camera calibration models
-This step is necessary if site calibration images are collected without distance measurements. A camera calibration model is needed for each type of camera, where type is defined by the combination of camera parameters and image resolution setting. In practice, camera parameters may vary between makes, but are likely to be consistent across minor model variations within makes (although this may be worth checking). To check which types exist in your data, it may help to create the camera lookup table described under step 3 of the following section on fitting deployment calibration models. Running `unique(camtable`) will then list the types. The steps to fit camera calibration models are:
+This step is necessary if (as recommended above) deployment calibration images are collected without distance measurements. A camera calibration model is needed for each type of camera, where type is defined by the combination of camera parameters and image resolution setting. In practice, camera parameters may vary between makes, but are likely to be consistent across minor model variations within makes (although this may be worth checking). The steps to fit camera calibration models are:
 
-1. Create a dataframe of metadata from the digitised camera calibration images. The CTtracking function `read.exif` can be used, but before using it for the first time, you need to download the exiftool executable to your computer. For windows (the function isn't currently geared up for Mac OS), rename the executable file exiftool.exe and place in a new directory named C:/Exiftool. You can then run `read.exif` with a path to the image folder as the sole argument, for example:
+1. Create a dataframe of metadata from the digitised camera calibration images. The CTtracking function `read.exif` can be used, but before using it for the first time, you need to download the exiftool executable to your computer (<https://www.sno.phy.queensu.ca/~phil/exiftool>). For windows (the function isn't currently geared up for Mac OS), rename the executable file exiftool.exe and place in a new directory named C:/Exiftool. You can then run `read.exif` with a path to the image folder as the sole argument, for example:
 
 ```{r message=FALSE}
 exifdat.cam <- read.exif("./Survey_yyy/CameraImages")
@@ -184,7 +193,7 @@ Any clearly out of place points or poles may indicate a digitising or pole place
 plot(cmods)
 ```
 
-```{r echo=FALSE, fig.cap="Fig. 5. Diagnostic plots for a camera calibration model", fig.align="center"}
+```{r echo=FALSE, fig.cap="Diagnostic plots for a camera calibration model", fig.align="center"}
 par(mfrow=c(1,2))
 plot(cmods[[1]])
 ```
@@ -209,7 +218,7 @@ exifdat <- read.csv("./Survey_yyy/exifdata.csv", stringsAsFactors = FALSE)
   * exifdat: the dataframe of exifdata created above
   * datatype: "both" indicates that the input data contains both pole and animal digitisations. In this case, the output is a list with elements *animal* and *pole*, respectively dataframes of animal and pole digitisation data. 
 
-There may be a warning here that flags up some problematic poles (e.g. ony one, or more than two points apparently digitised on a single pole). You may want go back and check for errors in the digitisation and fix these before proceeeding.
+There may be a warning here that flags up some problematic poles (e.g. only one, or more than two points apparently digitised on a single pole). You may want go back and check for errors in the digitisation and fix these before proceeding.
   
 ```{r warning=FALSE, results=FALSE, message=FALSE}
 depdat <- read.digidat(path="./Survey_yyy/DeploymentData", 
@@ -217,10 +226,11 @@ depdat <- read.digidat(path="./Survey_yyy/DeploymentData",
                        datatype="both")
 ```
 
-3. Fit the deployment calibration models using `cal.site`, supplying the pole digitisation dataframe created above as the sole argument. To do this, you first need to create a deployment table, specifying which camera type (as named in the camera calibration models) was used at each deployment (even if the same type is used for all deployments). There may be warnings here if some models could not be fitted (e.g. if fewer than three poles were digitised). 
+3. Fit the deployment calibration models using `cal.site`, supplying the pole digitisation dataframe created above as the sole argument. To do this, you first need to create a deployment table, specifying which camera type (as named in the camera calibration models) was used at each deployment (even if the same type is used for all deployments). In the example below, note the specific field names, which must be exactly as given (deployment start and stop times/dates are also given but are not used at this stage in the analysis). `cal.site` may throw warnings here if some models could not be fitted (e.g. if fewer than three poles were digitised). 
 
-```{r warning=FALSE, results=FALSE, message=FALSE}
-deptab <- read.csv("./Survey_yyy/deptab.csv", colClasses = "character")
+```{r warning=FALSE, message=FALSE}
+deptab <- read.csv("./Survey_yyy/deptable.csv")
+head(deptab)
 smods <- cal.site(depdat$pole, cmods, deptab)
 ```
 
@@ -233,9 +243,9 @@ Any clearly out of place points or poles may indicate a digitising problem that 
 ```{r eval=FALSE}
 plot(smods)
 ```
-```{r echo=FALSE, fig.cap="Fig. 6. Diagnostic plots for a deployment calibration model", fig.align="center"}
+```{r echo=FALSE, fig.cap="Diagnostic plots for a deployment calibration model", fig.align="center"}
 par(mfrow=c(1,2))
-plot(smods$'01')
+plot(smods$'Site01')
 ```
 
 ### Generating animal position and speed data
@@ -244,7 +254,7 @@ plot(smods$'01')
 ```{r message=FALSE, results=FALSE, warning=FALSE}
 posdat <- predict.pos(depdat$animal, smods)
 ```
-It is likely that radial distances for some records will have been poorly estimated where animals move beyond the deployment calibration grid, so it is worth exploring the distribution, perhaps going back to the digitisations to check for problems (e.g. substantial shift in camera orientation during the deployment), and judiciously removing any remaining extreme observations from subsequent analyses.
+It is likely that radial distances for some records will have been poorly estimated, for example where animals move beyond the deployment calibration grid, so it is worth exploring the distributions of distance and angle estimates, perhaps going back to the digitisations to check for problems (e.g. substantial shift in camera orientation during the deployment), and judiciously removing any remaining extreme observations from subsequent analyses.
 
 
 2. Using the augmented dataframe created in the last step, create a dataframe summarising sequences with distances travelled over given times and the resulting speed estimates.
