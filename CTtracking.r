@@ -406,6 +406,35 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 
 #DATA PREP FUNCTIONS#############################################
 
+#split.annotations#
+
+#Splits out multi-field annotations entered as a single field
+
+#INPUT
+# dat: a vector of data containing multiple field separated by a given character, sep
+# colnames: a vector of the names to assign to output columns
+# sep: the character defining field breaks within dat
+
+#OUTPUT
+# A dataframe with one column per field from the input data. The function fails if not all 
+# entries in dat have the same number of sep characters (implying different numbers of columns),
+# or if the number of colnames doesn't equal the number of columns in dat.
+split.annotations <- function(dat, colnames=NULL, sep=";"){
+  lst <- strsplit(as.character(dat), sep)
+  seps <- unique(unlist(lapply(lst, length)))
+  
+  if(length(seps)>1) stop("Not all annotations have the same number of entries")
+  if(is.null(colnames)) colnames <- paste0("X",1:seps) else
+    if(seps!=length(colnames))
+      stop("Number of column names is not equal to the number of annotations")
+  
+  d <- data.frame(Reduce(rbind, lst), stringsAsFactors=F)
+  d <- type.convert(d, as.is=T)
+  names(d) <- colnames
+  rownames(d) <- NULL
+  d
+}
+
 
 #read.digidat#
 
