@@ -2,7 +2,7 @@
 title: Protocol for generating distance data from camera trap images using a simple
   computer vision approach, CTtracking V0.2
 author: "Marcus Rowcliffe"
-date: "18 November 2019"
+date: "21 November 2019"
 output:
   pdf_document: default
   html_document: default
@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Background
-The random encounter model, distance sampling and related methods require data on animal positions relative to camera in order to estimate camera detection zone size and (for REM) animal speed of movement. This vignette sets out a process for generating animal position and speed data from camera trap images using:  
+The random encounter model, distance sampling and related methods require data on animal positions relative to camera in order to estimate camera detection zone size and (for REM) animal speed of movement. This vignette sets out a process for generating animal position and speed data from camera trap images in order to apply either the REM or Distance sampling, using:  
 
 1. Images of calibration objects to inform computer vision models;
 
@@ -35,9 +35,8 @@ The goal is to take pictures of objects of known size at a range of known distan
 3. With a camera positioned in front of the arena and armed, take one image of the pole at each position on the array, holding up some visible marker of the distance. For example, in Fig. 1, the pole is placed at 2 m from the camera, with distance indicated in metres by the number of fingers displayed. 
 
 
-```{r echo=FALSE, fig.cap="Example image of a camera calibration pole in position 2 m from the camera.", out.width="60%", fig.align="center"}
-pth <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool/Reconyx PC800 calibration images/IMG_0029.JPG"
-knitr::include_graphics(pth)
+```{r echo=FALSE, fig.cap="Animaltracker screenshot of a camera calibration image with pole in position 2 m from the camera, and two postions digitised at given heights.", out.width="60%", fig.align="center"}
+knitr::include_graphics("animaltracker_camera_screenshot.jpg")
 ```
 
 
@@ -71,9 +70,8 @@ The goal is to take images of calibration poles in the field, as above but witho
 3.	Repeat this for further pole placements across the field of view and away from the camera with placements spaced about 1 m apart. Continue away from the camera to the maximum extent that any animals are likely to be captured, or if possible a bit beyond. As you reach greater distances, it may help to have a second person next to the camera to keep it triggering. Aim for 10-20 placements, perhaps more if visibility is very good Fig. 4 shows an example configuration of deployment calibration pole placements.
 
 
-```{r echo=FALSE, fig.cap="Example image of a deployment calibration pole placement.", out.width="60%", fig.align="center"}
-pth <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/Survey_yyy/DeploymentImages/Site01/IMG_0096.JPG"
-knitr::include_graphics(pth)
+```{r echo=FALSE, fig.cap="Animal tracker screenshot of a deployment calibration image with two pole positions digitised at given heights.", out.width="60%", fig.align="center"}
+knitr::include_graphics("animaltracker_deployment_screenshot.jpg")
 ```
 
 
@@ -97,58 +95,51 @@ text(0,0,"Camera", pos=2, col="darkred")
 ## 2. Digitising images
 
 ### Animaltracker basics
-1. Organise images into folders specific to the deployment (for animal and deployment calibration images) or camera (for camera calibration images), naming folders with unique identifiers.
+1. Organise images into folders specific to the deployment (for animal and deployment calibration images) or camera (for camera calibration images), naming folders with unique identifiers unique to the deployment or camera type as appropriate.
 
 2. Open animal tracker: <https://lauravzarco.github.io/animaltracker>
 
 3. Click *Browse* -> navigate to your chosen image directory -> select all images (*Ctrl+a*) -> OK
 
 4. Digitise points:
-  * Scroll through images using Next / Previous buttons or -> / <- cursor keys to find those you want to digitise.
+  * Scroll through images using Next / Previous buttons or cursor keys to find those you want to digitise.
   * To digitise a point or sequence: click *Add sequence* and click on the desired point on each image until the sequence ends. Note that it is not possible to digitise a multi-point sequence on a single image.
   * Once you have digitised a point, a data table will appear. Use the default *name* field to tag species, and add any additional fields by typing the field name into the box above the table and clicking *Add field to all sequences*.
   * If you want to delete or move a point, scroll back to the image on which the point was digitised (you'll see it highlighted when viewing the correct image) and click *Add mode*, then click and drag the point to move it, or click *Delete point* to delete. Once finished, click *Edit mode* to go back and continue digitising.
   * To show or hide a sequence, click on its 'eye' icon; to delete a sequence, click on its 'x' icon.
   * Use the mouse scroll wheel to zoom the image, or click and drag to move it. The *Reset view* button returns the image to full screen.
 
-5. When finished digitising a set of images, click *Export CSV* -> *Open* -> *OK* -> save the resulting file to the the relevant directory with an informative name (see below on organising and naming different types of data). If you need to take a break and shut down before completing a set of images, make a note of the last image digitised. Then, when re-starting, open images from that point for the next session, export the csv file as above when ready, and cut and paste the resulting data into the partially completed csv file created earlier.
+5. When finished digitising a set of images, click *Export CSV* -> *Open* -> *OK* -> save the resulting file to the the relevant directory with an informative name (see *Saving digitisation data* below on organising and naming different types of data). If you need to take a break and shut down before completing a set of images, make a note of the last image digitised. Then, when re-starting, you can open images from that point for the next session, export the csv file as above when ready, and cut and paste the resulting data into the partially completed csv file created earlier.
 
 6. To start a new image directory, refresh your browser and repeat from step 3.
 
-
 ### Camera calibration
 
-1. For each pole, digitise two points a known height above ground, each as a new single-point sequence, and for each recording the following:
-  * distance from camera in metres, in a new field called "distance"; 
-  * height of digitised point in metres, in a new field called "height".
+For each pole, digitise two points a known height above ground, each as a new single-point sequence, and for each recording: distance from camera in metres, in a new field called "distance"; and height of digitised point in metres, in a new field called "height". See Fig. 1 for an example.
   
-2. Save data for each camera in a separate csv file, named with the unique identifier matching the name of the folder from which the images came, and placed in a single camera calibration data folder.
-
-
 ### Deployment calibration
 
-1. For each pole seen to be in position resting on the ground, digitise the upper- and lower-most visible reference points, each as a new single-point sequence. For each point, record the height of the point in metres in a new field called "height".
-
-2. Save data for each deployment in a separate csv file, named with the unique identifier matching the name of the folder from which the images came, and placed in a single deploymnet calibration data folder.
-
+For each pole seen to be in position resting on the ground, digitise the upper- and lower-most visible reference points, each as a new single-point sequence. For each point, record the height of the point in metres in a new field called "height". See Fig. 3 for an example.
 
 ### Animal sequences
+
 1. Digitise animal positions at points on the ground directly beneath the animals' centre of mass, as best you can judge.
 
-2. If the animal is only partially visible, digitise the position on the canvas outside the image itself. To do this, you may need to move or zoom the image to make space on the canvas. Fig. 7 shows an example of this.
+2. If the animal is only partially visible, digitise the position on the canvas outside the image itself. To do this, you may need to move or zoom the image to make space on the canvas (see Fig. 5 left panel).
 
-3. At least the first position of every individual animal sequence should be digitised, but it is not necessary to digitise every subsequent image. Only digitise movement sequences if:
-  * the animal shows significant change in position over the sequence; AND for as long as:
-  * the animal is continually observed with no more than 2 seconds or so between images; AND
-  * the animal's position is reasonably easy to locate within the image.
+3. At least the first position of every individual animal passing should be digitised. Subsequent positions of the same individual should be digitised as part of the same sequence (i.e. without pressing the *Add sequence* button, see Fig. 5 right panel), but it may be sensible to finish a sequence  before the animal has entirely disappeared if it has moved a long way from the camera (particularly if it moves well beyond the calibrated area).
 
-4. During digitisations, look out for moments at which the camera clearly changes its orientation. It may be necessary to truncate the deployment at that time, as positions for any points digitised after that cannot be accurately estimated unless there has been a subsequent set of calibration images taken that apply to that period. If you know there have been no applicable pole images taken, the deployment end time will need to be updated to the point at which the shift is first seen, and there is no need to digitise any further animal positions. If on the other hand there has been a cubsequent set of calibration images taken, you will need to create a new deployment, separating the images into separate folders and creating separate digitisation data files.
+4. During digitisation, look out for moments at which the camera clearly changes its orientation. It may be necessary to truncate the deployment at that time, as positions for any points digitised after that cannot be accurately estimated unless there has been a subsequent set of calibration images taken that apply to that period. If you know there have been no recalibration images taken, the deployment end time will need to be updated to the point at which the shift is first seen, and there is no need to digitise any further animal positions. If on the other hand there has been a subsequent set of calibration images taken, you will need to create a new deployment, separating the images into separate folders and creating separate digitisation data files.
 
 
-```{r echo=FALSE, fig.cap="Animaltracker screenshot, showing the first image of a sequence with the animal only partially visible, and the subsequently digitised track showing.", out.width="100%", fig.align="center"}
-pth <- "animaltracker_screenshot.jpg"
+```{r echo=FALSE, fig.cap="Animaltracker screenshots, showing the first (left) and second (right) images of a sequence. The animal (red fox) is initially only partially visible, and the image is zoomed out and shifted to find the animal's approximate position. In the second image, the animal is fully within the frame and the image has been resized positioned accordingly", out.width="100%", fig.align="center"}
+pth <- "animaltracker_animal_screenshots.jpg"
 knitr::include_graphics(pth)
 ```
+
+###Saving digitisation data
+When saving digitisation data, it essential for subsequent processing that the name of each csv file exactly matches the name of the folder from which the images came. For example, if you digitise a set of animal and calibration images from a folder named **Site01**, the resulting digitisation data file should be saved as **Site01.csv**. All data files should then be collected in a single directory for camera calibration, and a separate directory for deployments (animal and calibration sequences combined).
+
 
 ## 3. Generating position and speed data
 
