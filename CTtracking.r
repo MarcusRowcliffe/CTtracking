@@ -726,7 +726,6 @@ make.poledat <- function(dat){
   res
 }
 
-
 #CALIBRATION FUNCTIONS#############################################
 
 #make.camtable#
@@ -977,6 +976,41 @@ plot.sitecal <- function(mod){
 
 plot.calibration <- function(mods){
   lapply(mods, plot)
+}
+
+#show.image#
+
+#Shows digitised images with digitisation points.
+
+#INPUT
+# dat: a dataframe image names and digitisation points
+# dir: character string naming the directory containing the images
+# type: whether dat contains pole or animal data
+# 
+#dat must contain the following columns:
+# image_name
+# x and y (if type is animal, giving digitisation positions)
+# xb, xt, yb and yt (if type is pole, giving bottom and top digitisation positions)
+#
+#For animal data, typically applied to the $animal compenent of read.digidat() output.
+#For pole data, typically applied to the $site.model$data component of cal.site() output.
+
+show.image <- function(dat, dir, type=c("pole", "animal")){
+  type <- match.arg(type)
+  for(i in 1:nrow(dat)){
+    imgpath <- file.path(dir, dat$image_name[i])
+    img <- readJPEG(imgpath, native=T)
+    imdim <- dim(img)
+    title <- dat$image_name[i]
+    if(type=="pole") title <- paste0(title, " (", paste(dat[i, c("hb", "ht")], collapse=" / "), " m)")
+    plot(1,1, xlim=c(1, imdim[2]), ylim=c(1, imdim[1]), type="n", asp=1,
+         xaxt="n", yaxt="n", xlab="", ylab="", bty="n", main=title)
+    rasterImage(img, 1, 1, imdim[2], imdim[1])
+    if(type=="pole")
+      points(dat[i,c("xt","xb","xg")], imdim[1]-dat[i,c("yt","yb","yg")]+1, 
+             pch=16, col=c(2,2,5)) else
+               points(dat$x[i], imdim[1]-dat$y[i]+1, pch=16, col=2)
+  }
 }
 
 #DATA SUMMARY FUNCTIONS#############################################
