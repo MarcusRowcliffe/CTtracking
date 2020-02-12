@@ -30,18 +30,16 @@ setClass("calibration", representation("list"))
 
 #read.exif#
 
-#Runs command line ExifTool to extract metadata of all image/video/audio files within a folder
-#For a list of supported formats see https://www.sno.phy.queensu.ca/~phil/exiftool
+#Runs command line ExifTool to extract metadata of all image/video/audio files within
+#a directory and its subdirectories.
+#For a list of supported formats see https://www.sno.phy.queensu.ca/~phil/exiftool.
 #Requires standalone executable exiftool.exe to be present on your computer, available at above link
 #Unzip and rename the exiftool(-k).exe file to exiftool.exe
 
 #INPUT
 # inpath: a character string giving the path of the folder containing files to process
-# outpath: a character string giving the path of the folder in which to place results file (defaults to inpath)
+# loop.call: whether to call exiftool once (default), or by looping through subdirectories (see details)
 # toolpath: a character string giving the path of the folder containing exiftool.exe
-# return: should the function return the results as a dataframe
-# write: should the function return the results as a new .csv file within outpath
-# recursive: whether subdirectories of inpath should also be searched for images
 
 #OUTPUT
 #Optionally (depending on return input) a dataframe of metadata. 
@@ -49,22 +47,39 @@ setClass("calibration", representation("list"))
 # (or overwritten without warning) within outpath, and optionally preserved
 # (depending on write input)
 
-read.exif <- function(inpath, outpath=inpath, toolpath="C:/Exiftool", return=TRUE, write=FALSE, recursive=TRUE){
+#DETAILS
+#By default, the function calls the exiftool process once, set to recursively read 
+#through all subdirectories. This is relatively fast because it avoids the time 
+#overhead each time exiftool is run, but running the function on larger datasets 
+#can cause the process to run out of memory and abort. In this case, set 
+#loop.call=TRUE, and exiftool will be called once for each first-level subdirectory
+#within inpath, avoiding exhaustion of memory. What consititutes a large dataset
+#isn't entirely clear, but probably > 100,000 images.
+read.exif <- function(inpath, loop.call=FALSE, toolpath="C:/Exiftool"){
+
+  read.dir <- function(inpath){
+    outfile <- paste0(inpath, "/metadata.csv")
+    outf <- paste0("\"", outfile, "\"")
+    inpath <- paste0("\"", inpath, "\"")
+    cmd <- paste("exiftool -r -csv", inpath, ">", outf)
+    shell(cmd)
+    res <- read.csv(outfile, stringsAsFactors = FALSE)
+    file.remove(outfile)
+    return(res)
+  }
+
   wd <- getwd()
   qq <- strsplit(inpath, "")[[1]]
   if(qq[1]==".") inpath <- paste0(wd, paste0(qq[-1], collapse=""))
-  
   setwd(toolpath)
-  outfile <- paste0(outpath, "/metadata.csv")
-  outf <- paste0("\"", outfile, "\"")
-  inpath <- paste0("\"", inpath, "\"")
-  if(recursive==TRUE) sbd<-"-r" else sbd <- ""
-  cmd <- paste("exiftool", sbd, "-csv", inpath, ">", outf)
-  shell(cmd)
+  if(loop.call==FALSE) res <- read.dir(inpath) else{
+    dirs <- list.dirs(inpath, recursive=FALSE)
+    res <- lapply(dirs, read.dir)
+    res <- data.table::rbindlist(res, fill=TRUE)
+  }
+  
   setwd(wd)
-  res <- read.csv(outfile, stringsAsFactors = FALSE)
-  if(write==FALSE) file.remove(outfile)
-  if(return==TRUE) return(res)
+  return(res)
 }
 
 
