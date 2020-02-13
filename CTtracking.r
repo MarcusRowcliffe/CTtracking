@@ -52,6 +52,7 @@ setClass("calibration", representation("list"))
 #loop.call=TRUE, and exiftool will be called once for each first-level subdirectory
 #within inpath, avoiding exhaustion of memory. What consititutes a large dataset
 #isn't entirely clear, but probably > 100,000 images.
+
 read.exif <- function(inpath, loop.call=FALSE, toolpath="C:/Exiftool"){
 
   read.dir <- function(inpath){
@@ -65,30 +66,6 @@ read.exif <- function(inpath, loop.call=FALSE, toolpath="C:/Exiftool"){
     return(res)
   }
 
-<<<<<<< HEAD
-=======
-#DETAILS
-#By default, the function calls the exiftool process once, set to recursively read 
-#through all subdirectories. This is relatively fast because it avoids the time 
-#overhead each time exiftool is run, but running the function on larger datasets 
-#can cause the process to run out of memory and abort. In this case, set 
-#loop.call=TRUE, and exiftool will be called once for each first-level subdirectory
-#within inpath, avoiding exhaustion of memory. What consititutes a large dataset
-#isn't entirely clear, but probably > 100,000 images.
-read.exif <- function(inpath, loop.call=FALSE, toolpath="C:/Exiftool"){
-
-  read.dir <- function(inpath){
-    outfile <- paste0(inpath, "/metadata.csv")
-    outf <- paste0("\"", outfile, "\"")
-    inpath <- paste0("\"", inpath, "\"")
-    cmd <- paste("exiftool -r -csv", inpath, ">", outf)
-    shell(cmd)
-    res <- read.csv(outfile, stringsAsFactors = FALSE)
-    file.remove(outfile)
-    return(res)
-  }
-
->>>>>>> e9930f9599e8ade8d1133c0c93e290f2abfe8649
   wd <- getwd()
   qq <- strsplit(inpath, "")[[1]]
   if(qq[1]==".") inpath <- paste0(wd, paste0(qq[-1], collapse=""))
