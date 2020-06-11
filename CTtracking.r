@@ -664,10 +664,10 @@ make.poledat <- function(dat){
   gotpid <- any(c("pole_id", "filename") %in% colnames)
   if(!gotxy | !gotpid) 
     stop("Input dat must have at least columns x, y, and EITHER pole_id OR filename")
-
   if("height" %in% colnames){
     dat$height <- suppressWarnings(as.numeric(as.character(dat$height)))
     dat <- subset(dat, !is.na(height))
+    dat <- dat[order(dat$height), ]
   }
   if("distance" %in% names(dat)){
     dat$distance <- suppressWarnings(as.numeric(as.character(dat$distance)))
@@ -677,30 +677,34 @@ make.poledat <- function(dat){
     dat$length <- suppressWarnings(as.numeric(as.character(dat$length)))
     dat <- subset(dat, !is.na(length))
   }
-  
-  if(!"pole_id" %in% names(dat)) dat$pole_id <- with(dat, paste(group_id, filename, sep="_"))
+  if(!"pole_id" %in% names(dat)){
+    dat$pole_id <- with(dat, paste(group_id, filename, sep="_"))
+    dat <- dat[order(dat$pole_id), ]
+  } else   dat <- dat[order(dat$filename), ]
 
-  duff2 <- duff3 <- duff4 <- FALSE
+  duff1 <- duff2 <- duff3 <- FALSE
   tab <- table(dat$pole_id)
   if("height" %in% names(dat)){
     minh <- tapply(dat$height, dat$pole_id, min)
-    duff1 <- tab>2
-    duff2 <- (tab==1 & minh>0)
-  } else
-    duff1 <- tab>2
+    duff1 <- (tab==1 & minh>0)
+  }
   if("distance" %in% names(dat))
-    duff3 <- with(dat, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
-    
-  if(any(duff1 | duff2 | duff3))
-    dat <- droplevels(dat[!dat$pole_id %in% names(which(duff1 | duff2 | duff3)), ])
+    duff2 <- with(dat, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
   
+  if(any(duff1 | duff2))
+    dat <- droplevels(subset(dat, !dat$pole_id %in% names(which(duff1 | duff2))))
+  tab <- table(dat$pole_id)
+  i <- which(sequence(tab)==1)
+  i <- c(i, tail(i,-1)-1, nrow(dat))
+  dat <- dat[sort(i), ] #remove excess points (>2 per pole)
+
   tab <- table(dat$pole_id)
   i <- dat$pole_id %in% names(tab)[tab==1]
   if(nrow(dat)>0) res <- pairup(dat[!i, ]) else res <- NULL
   if("height" %in% names(dat)){
-    duff4 <- res$hb>=res$ht
-    names(duff4) <- res$pole_id
-    if(any(duff4, na.rm=TRUE)) res <- droplevels(res[!duff4, ])
+    duff3 <- res$hb>=res$ht
+    names(duff3) <- res$pole_id
+    if(any(duff3, na.rm=TRUE)) res <- droplevels(res[!duff3, ])
   }
   
   solos <- dat[i, ]
@@ -717,23 +721,19 @@ make.poledat <- function(dat){
   }
   if(!is.null(res)) res <- res[order(res$pole_id), ]
   
-  if(any(duff1 | duff2 | duff3) | any(duff4)){
+  if(any(duff1 | duff2) | any(duff3)){
     message("Warning:\n Some poles were discarded because they...")
     if(any(duff1)){
-      message("...were digitised  more than twice:")
+      message("...were digitised only once at height > 0:")
       cat(names(which(duff1)), sep="\n")
     }
     if(any(duff2)){
-      message("...were digitised only once at height > 0:")
+      message("...had different distances at top and base:")
       cat(names(which(duff2)), sep="\n")
     }
     if(any(duff3)){
-      message("...had different distances at top and base:")
-      cat(names(which(duff3)), sep="\n")
-    }
-    if(any(duff4)){
       message("...had base height >= top height:")
-      cat(names(which(duff4)), sep="\n")
+      cat(names(which(duff3)), sep="\n")
     }
   }
   res
