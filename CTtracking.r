@@ -619,22 +619,22 @@ decimal.time <- function(dat, sep=":"){
 
 #make.pairdat#
 
-#Converts a dataframe of digitisation calibration pole data to a "paired up" format, 
-#with  one row per pole. Input data must have at least fields x and y (pixel positions), 
-#plus either a pole identifier field (pair_id) or an image file name field (filename). 
-#If filename is provided but not pair_id, filename is taken to be the pole identifier,
+#Converts a dataframe of digitisation data to a "paired up" format, with  one row per 
+#pole, animal or other object. Input data must have at least fields x and y (pixel positions), 
+#plus either an object identifier field (pair_id) or an image file name field (filename). 
+#If filename is provided but not pair_id, filename is taken to be the object identifier,
 #comined with Directory if this is present. Specific additional fields, when present,
 #must use the following names:
 # Directory: full path to the directory containing the digitised image
 # distance: distance from camera; required for camera calibration
-# length: length of pole digitised; required for camera calibration
+# length: length of pole digitised; required for camera calibration and distance estimation
 # height: height of digitised point off the ground; required for site calibration
 
 #INPUT
-# dat: dataframe of digitisation data (ideally created by read.digidat).
+# dat: dataframe of digitisation data.
 
 #OUTPUT
-# A dataframe with the two ditisation points per pole arranged in single rows.
+# A dataframe with the two ditisation points per pole/animal arranged in single rows.
 # Returns the input data minus x, y and sequence_annotation, plus columns:
 #  xb, yb, xt, yt: x and y co-ordinates of pole b(ottom) and t(op) positions digitised
 #  hb, ht: actual heights above ground of the digitised pole positions
@@ -677,11 +677,9 @@ make.pairdat <- function(dat){
     dat$length <- suppressWarnings(as.numeric(as.character(dat$length)))
     dat <- subset(dat, !is.na(length))
   }
-  if(!"pair_id" %in% names(dat)){
-    dat$pair_id <- with(dat, paste(group_id, filename, sep="_"))
-    dat <- dat[order(dat$pair_id), ]
-  } else   dat <- dat[order(dat$filename), ]
-
+  if(!"pair_id" %in% names(dat)) dat$pair_id <- with(dat, paste(group_id, filename, sep="_"))
+  dat <- dat[order(dat$pair_id), ]
+  
   duff1 <- duff2 <- duff3 <- FALSE
   tab <- table(dat$pair_id)
   if("height" %in% names(dat)){
