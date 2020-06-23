@@ -510,7 +510,7 @@ read.digidat <- function(path, exifdat=NULL, exifcols=NULL,
     return(data.frame(file=basename(files), t(colnames)))
   }
 
-  df <- bind_rows(df.list)
+  df <- dplyr::bind_rows(df.list)
   if("height" %in% names(df))
     df$height <- as.numeric(df$height) else
     if(datatype!="animal")
@@ -851,23 +851,40 @@ plot.camcal <- function(mod){
 
 #calc.distance
 
-#Calculate distances given a dataframe of ...
+#Calculate distances from camera of an object of known size.
 
 #INPUT
-
+#dat: A dataframe with (at least) columns named:
+# xb,yb,xt,yt: paired x and y pixel positions of object extremities, defined by (xb,yb) and (xt,yt)
+# length: real-world distances between the pixels in each pair
+#cmod: A camera calibration object created by cal.cam; if cmod holds a single calibration,
+# this is use without reference to its namel; if it holds multiple calibrations, dat must have
+# column cam_id, used to select the appropriate calibration object by name matching.
 
 #OUTPUT
-
-
-dat <- animdat
-cmod <- camcal$Forestcam_calibration
-
-
-pixlen <- sqrt((dat$xt-dat$xb)^2 + (dat$yt-dat$yb)^2)
-relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
-FSratio <- predict(cmod$model, newdata = data.frame(relx=relx))
-dist <- FSratio * dat$length * cmod$dim$y/pixlen
-hist(dist, breaks=seq(0,420,20))
+#A dataframe identical to dat plus additional column distance, giving distances
+#from camera in the same  units as length in dat input.
+calc.distance <- function(dat, cmod){
+  
+  calc <- function(dat, cmod){
+    pixlen <- sqrt((dat$xt-dat$xb)^2 + (dat$yt-dat$yb)^2)
+    relx <- (dat$xb+dat$xt)/(2 * cmod$dim$x) - 0.5
+    FSratio <- predict(cmod$model, newdata = data.frame(relx=relx))
+    dat$distance <- FSratio * dat$length * cmod$dim$y/pixlen
+    dat
+  }
+  
+  if(!all(c("xb","yb","xt","yt","length") %in% names(dat))) stop("dat must contain (at least) columns xb, yb, xt, yt and length")
+  
+  if(length(cmod)==1) return(calc(dat, cmod[[1]])) else{
+    if(!"cam_id" %in% names(dat)) stop("cam_id column must be present in dat if cmod holds multiple calibrations")
+    cams <- unique(dat$cam_id)
+    if(!all(cams %in% names(cmod))) stop("Not all dat$cam_id values could be found in names(cmod)")
+    res <- lapply(cams, function(cam) calc(subset(dat, cam_id==cam), cmod[[cam]]))
+    res <- dplyr::bind_rows(res)
+    return(dplyr::arrange(res, sequence_id))
+  }
+}
 
 
 #cal.site#
@@ -1114,7 +1131,7 @@ predict.pos <- function(dat, mod){
     data.frame(dt, radius=predict.r(sm, dt$x/dt$xdim-0.5, dt$y/dt$ydim),
                angle=cm$APratio * (dt$x/dt$xdim-0.5))
   })
-  res <- bind_rows(res)
+  res <- dplyr::bind_rows(res)
   tab <- table(res$sequence_id)
   res$frame_count <- sequence(tab)
   res
