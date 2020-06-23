@@ -849,6 +849,27 @@ plot.camcal <- function(mod){
   lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
 }
 
+#calc.distance
+
+#Calculate distances given a dataframe of ...
+
+#INPUT
+
+
+#OUTPUT
+
+
+dat <- animdat
+cmod <- camcal$Forestcam_calibration
+
+
+pixlen <- sqrt((dat$xt-dat$xb)^2 + (dat$yt-dat$yb)^2)
+relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
+FSratio <- predict(cmod$model, newdata = data.frame(relx=relx))
+dist <- FSratio * dat$length * cmod$dim$y/pixlen
+hist(dist, breaks=seq(0,420,20))
+
+
 #cal.site#
 
 #Create a site calibration model from data on pole distances from camera and positions within image.
@@ -874,7 +895,6 @@ plot.camcal <- function(mod){
 #              d ~ b1 / (y-(b2+b3*x))
 #  data: the data input to the model
 #  dim: the x,y pixel dimensions of the images used for calibration
-
 cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE, minpoles=3){
 
   cal <- function(dat, cmod=NULL){
