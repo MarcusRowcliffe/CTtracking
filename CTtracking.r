@@ -580,9 +580,9 @@ read.digidat <- function(path, exifdat=NULL, exifcols=NULL,
   
   res <- switch(datatype,
                 "animal" = res <- df,
-                "pole" = make.poledat(df),
+                "pole" = make.pairdat(df),
                 "both" = list(animal=subset(df, name!=""), 
-                              pole=make.poledat(subset(df, !is.na(height)))
+                              pole=make.pairdat(subset(df, !is.na(height)))
                               )
   )
   res
@@ -617,12 +617,12 @@ decimal.time <- function(dat, sep=":"){
 }
 
 
-#make.poledat#
+#make.pairdat#
 
 #Converts a dataframe of digitisation calibration pole data to a "paired up" format, 
 #with  one row per pole. Input data must have at least fields x and y (pixel positions), 
-#plus either a pole identifier field (pole_id) or an image file name field (filename). 
-#If filename is provided but not pole_id, filename is taken to be the pole identifier,
+#plus either a pole identifier field (pair_id) or an image file name field (filename). 
+#If filename is provided but not pair_id, filename is taken to be the pole identifier,
 #comined with Directory if this is present. Specific additional fields, when present,
 #must use the following names:
 # Directory: full path to the directory containing the digitised image
@@ -646,10 +646,10 @@ decimal.time <- function(dat, sep=":"){
 #  3. they are digitised only once at height > 0;
 #  4. conflicting distance values are given for two digitisation points.
 
-make.poledat <- function(dat){
+make.pairdat <- function(dat){
 
   pairup <- function(dat){
-    dat <- dat[order(dat$pole_id, dat$y), ]
+    dat <- dat[order(dat$pair_id, dat$y), ]
     j <- 2*(1:(nrow(dat)/2))
     xy <- cbind(dat[j, c("x","y")], dat[j-1, c("x","y")])
     names(xy) <- c("xb","yb","xt","yt")
@@ -661,9 +661,9 @@ make.poledat <- function(dat){
 
   colnames <- names(dat)
   gotxy <- all(c("x","y") %in% colnames)
-  gotpid <- any(c("pole_id", "filename") %in% colnames)
+  gotpid <- any(c("pair_id", "filename") %in% colnames)
   if(!gotxy | !gotpid) 
-    stop("Input dat must have at least columns x, y, and EITHER pole_id OR filename")
+    stop("Input dat must have at least columns x, y, and EITHER pair_id OR filename")
   if("height" %in% colnames){
     dat$height <- suppressWarnings(as.numeric(as.character(dat$height)))
     dat <- subset(dat, !is.na(height))
@@ -677,33 +677,33 @@ make.poledat <- function(dat){
     dat$length <- suppressWarnings(as.numeric(as.character(dat$length)))
     dat <- subset(dat, !is.na(length))
   }
-  if(!"pole_id" %in% names(dat)){
-    dat$pole_id <- with(dat, paste(group_id, filename, sep="_"))
-    dat <- dat[order(dat$pole_id), ]
+  if(!"pair_id" %in% names(dat)){
+    dat$pair_id <- with(dat, paste(group_id, filename, sep="_"))
+    dat <- dat[order(dat$pair_id), ]
   } else   dat <- dat[order(dat$filename), ]
 
   duff1 <- duff2 <- duff3 <- FALSE
-  tab <- table(dat$pole_id)
+  tab <- table(dat$pair_id)
   if("height" %in% names(dat)){
-    minh <- tapply(dat$height, dat$pole_id, min)
+    minh <- tapply(dat$height, dat$pair_id, min)
     duff1 <- (tab==1 & minh>0)
   }
   if("distance" %in% names(dat))
-    duff2 <- with(dat, tapply(distance, pole_id, min) != tapply(distance, pole_id, max))
+    duff2 <- with(dat, tapply(distance, pair_id, min) != tapply(distance, pair_id, max))
   
   if(any(duff1 | duff2))
-    dat <- droplevels(subset(dat, !dat$pole_id %in% names(which(duff1 | duff2))))
-  tab <- table(dat$pole_id)
+    dat <- droplevels(subset(dat, !dat$pair_id %in% names(which(duff1 | duff2))))
+  tab <- table(dat$pair_id)
   i <- which(sequence(tab)==1)
   i <- c(i, tail(i,-1)-1, nrow(dat))
   dat <- dat[sort(i), ] #remove excess points (>2 per pole)
 
-  tab <- table(dat$pole_id)
-  i <- dat$pole_id %in% names(tab)[tab==1]
+  tab <- table(dat$pair_id)
+  i <- dat$pair_id %in% names(tab)[tab==1]
   if(nrow(dat)>0) res <- pairup(dat[!i, ]) else res <- NULL
   if("height" %in% names(dat)){
     duff3 <- res$hb>=res$ht
-    names(duff3) <- res$pole_id
+    names(duff3) <- res$pair_id
     if(any(duff3, na.rm=TRUE)) res <- droplevels(res[!duff3, ])
   }
   
@@ -719,7 +719,7 @@ make.poledat <- function(dat){
     solos2$y <- solos$y-predict(mod, newdata=nd)
     res <- rbind(res, pairup(rbind(solos,solos2)))
   }
-  if(!is.null(res)) res <- res[order(res$pole_id), ]
+  if(!is.null(res)) res <- res[order(res$pair_id), ]
   
   if(any(duff1 | duff2) | any(duff3)){
     message("Warning:\n Some poles were discarded because they...")
