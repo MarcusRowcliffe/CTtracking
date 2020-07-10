@@ -936,17 +936,21 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE, minpoles=3){
         poledat$length <- dat$ht-dat$hb
         cmod <- cal.cam(poledat)
       }
-      if(flex)
-        mod <- try(nls(distance~b1/(rely^b4-(b2+b3*relx)), data=dat, algorithm="port", 
-                     start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0, b4=1),
-                     lower=c(b1=0,b2=0,b3=-Inf,b4=0), 
-                     upper=c(b1=Inf,b2=min(dat$rely),b3=Inf,b4=Inf),
-                     trace=F )) else
-        mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
-                     start=list(b1=min(dat$distance)/2, b2=min(dat$rely)*0.9, b3=0),
-                     lower=c(b1=0,b2=0,b3=-Inf), 
-                     upper=c(b1=Inf,b2=min(dat$rely),b3=Inf),
-                     trace=F ))
+      repeat{
+        b1.start <- runif(1,0,max(dat$distance))
+        if(flex)
+          mod <- try(nls(distance~b1/(rely^b4-(b2+b3*relx)), data=dat, algorithm="port", 
+                       start=list(b1=b1.start, b2=min(dat$rely)*0.9, b3=0, b4=1),
+                       lower=c(b1=0,b2=0,b3=-Inf,b4=0), 
+                       upper=c(b1=Inf,b2=min(dat$rely),b3=Inf,b4=Inf),
+                       trace=F )) else
+          mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
+                       start=list(b1=b1.start, b2=min(dat$rely)*0.9, b3=0),
+                       lower=c(b1=0,b2=0,b3=-Inf), 
+                       upper=c(b1=Inf,b2=min(dat$rely),b3=Inf),
+                       trace=F ))
+          if(class(mod)=="nls") break
+      }
       res <- list(cam.model=cmod, site.model=list(model=mod, data=dat, dim=dim))
       class(res) <- "sitecal"
     }
