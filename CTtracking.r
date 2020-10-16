@@ -19,7 +19,7 @@
 
 
 require(magick)
-require(dplyr)
+require(tidyr)
 
 setClass("camcal", representation("list"))
 setClass("sitecal", representation("list"))
@@ -27,57 +27,119 @@ setClass("calibration", representation("list"))
 
 #GENERAL FUNCTIONS#############################################
 
+#install.exiftool#
+
+#Downloads exiftool Windows executable from exiftool.org and prepares it for 
+#use locally.
+
+#INPUT
+# dir: character string giving the directory in which to place exiftool
+
+#DETAILS
+#When dir is NULL (the default), exiftool is placed in a folder called exiftool
+#in the current R library, indentifed using .libPaths(). The exiftool folder 
+#is created if it doesn't already exist.
+
+install.exiftool <- function(dir=NULL){
+  if(is.null(dir)) dir <- file.path(.libPaths()[1], "exiftool")
+  if(!dir.exists(dir)) dir.create(dir)
+  zipout <- file.path(dir, "temp.zip")
+  utils::download.file("https://exiftool.org/exiftool-12.07.zip", zipout)
+  utils::unzip(zipout, exdir=dir)
+  file.remove(zipout)
+  filenm <- file.path(dir, "exiftool.exe")
+  if(file.exists(filenm)) file.remove(filenm)
+  renm <- file.rename(list.files(dir, full.names = TRUE), filenm)
+  if(renm) paste("exiftool.exe successfully downloaded to", dir)
+}
+
+#peep.exif#
+
+#Extracts exif data from a single file for inspection prior to extracting a whole folder.
+
+#INPUT
+# path: a single character string giving a path to folder or file
+# file.index: which file number to extract from (only used if path is a folder)
+
+#OUTPUT
+#A two-column dataframe of metadata (Tag and Value). 
+
+peep.exif <- function(path, file.index=1){
+  if(!file.exists(path)) stop("path not found")
+  if(dir.exists(path)){
+    allfls <- list.files(path, full.names=TRUE, recursive=TRUE)
+    n <- length(allfls)
+    if(n==0) stop(paste("No files found in", path))
+    if(length(file.index)>1 | class(file.index)!="numeric") stop("file.index must be a single integer")
+    if(file.index<1 | file.index>n) stop(paste0("file.index must be between 1 and ", length(allfls), " (the number of files in ", path, ")"))
+    path <- allfls[file.index]
+  }
+  res <- read.exif2(path)
+  data.frame(Tag=names(res), Value=as.character(res[1,]), stringsAsFactors=FALSE)
+}
 
 #read.exif#
 
-#Runs command line ExifTool to extract metadata of all image/video/audio files within
-#a directory and its subdirectories.
-#For a list of supported formats see https://www.sno.phy.queensu.ca/~phil/exiftool.
-#Requires standalone executable exiftool.exe to be present on your computer, available at above link
-#Unzip and rename the exiftool(-k).exe file to exiftool.exe
+#Runs command line executable exiftool.exe (see exiftool.org) to extract metadata of
+#all files within a directory and its subdirectories. Before using this function for
+#the first time, run install.exiftool(), or download manually, unzip and rename the
+#exiftool(-k).exe file to exiftool.exe.
 
 #INPUT
-# inpath: a character string giving the path of the folder containing files to process
-# loop.call: whether to call exiftool once (default), or by looping through subdirectories (see details)
+# path: a single character string giving a path to folder or file
+# tags: a character vector of tag names to extract
+# usertag: a single character string giving the name of a tag containing user annotations
+# tagsep: the character or string used to separate fields within strings
+# valsep: the character or string used to separate field names from values within fields
 # toolpath: a character string giving the path of the folder containing exiftool.exe
 
 #OUTPUT
 #A dataframe of metadata. 
 
 #DETAILS
-#By default, the function calls the exiftool process once, set to recursively read 
-#through all subdirectories. This is relatively fast because it avoids the time 
-#overhead each time exiftool is run, but running the function on larger datasets 
-#can cause the process to run out of memory and abort. In this case, set 
-#loop.call=TRUE, and exiftool will be called once for each first-level subdirectory
-#within inpath, avoiding exhaustion of memory. What consititutes a large dataset
-#isn't entirely clear, but probably > 100,000 images.
+#By default (tags=""), all available tags are extracted. If usertag is provided, this
+#tag will be separated into multiple columns in the output using split.tags, based on 
+#tagsep and valsep values (these are ignored if usertag=NULL). If you only want separated 
+#usertag data, tags can be set to NULL to suppress additional tag extraction. By default, 
+#tooldir is a folder named exiftool within the current R library (see install.exiftool).
+#Non-existent tags are ignored without a warning, no valid tag names is an error.
 
-read.exif <- function(inpath, loop.call=FALSE, toolpath="C:/Exiftool"){
-
-  read.dir <- function(inpath){
-    outfile <- paste0(inpath, "/metadata.csv")
-    outf <- paste0("\"", outfile, "\"")
-    inpath <- paste0("\"", inpath, "\"")
-    cmd <- paste("exiftool -r -csv", inpath, ">", outf)
-    shell(cmd)
-    res <- read.csv(outfile, stringsAsFactors = FALSE)
-    file.remove(outfile)
-    return(res)
-  }
-
-  wd <- getwd()
-  qq <- strsplit(inpath, "")[[1]]
-  if(qq[1]==".") inpath <- paste0(wd, paste0(qq[-1], collapse=""))
-  setwd(toolpath)
-  if(loop.call==FALSE) res <- read.dir(inpath) else{
-    dirs <- list.dirs(inpath, recursive=FALSE)
-    res <- lapply(dirs, read.dir)
-    res <- data.table::rbindlist(res, fill=TRUE)
+read.exif <- function(dir, tags="", usertag=NULL, tagsep=", ", valsep=": ", tooldir=NULL){
+  if(length(path)>1) stop("path must be a string pointing to a single directory or file")
+  if(is.null(toolpath)) toolpath <- file.path(.libPaths()[1], "exiftool")
+  if(!file.exists(file.path(toolpath,"exiftool.exe"))) stop(paste("Can't find", file.path(toolpath,"exiftool.exe")))
+  if(!file.exists(path)) stop("path not found")
+  if(dir.exists(path)) nfiles <- length(list.files(path, recursive = TRUE)) else nfiles <- 1
+  if(nfiles==0) stop(paste("No files found in", path))
+  
+  if(!is.null(usertag) & !is.null(tags)) if(any(grepl(usertag, tags, ignore.case = TRUE)))
+    tags <- tags[!grepl(usertag, tags, ignore.case=TRUE)]
+  if(!"" %in% tags){
+    tags <- c(tags, usertag)
+    if(is.null(tags)) stop("No tags or usertag defined")
+    tags <- paste(paste0("-", tags), collapse=" ")
   }
   
+  cmd <- paste("exiftool -ext jpg -r -t -s", tags, paste0('"', path, '"'))
+  wd <- getwd()
+  setwd(toolpath)
+  txtout <- shell(cmd, intern=TRUE)
   setwd(wd)
-  return(res)
+  
+  i <- grepl("\t", txtout)
+  if(sum(i)==0) stop("No matching tags found in metadata")
+  dflong <- read.table(text=txtout[i], stringsAsFactors = FALSE, sep="\t")
+  if(nfiles==1) dflong$rowid <- 1 else
+    dflong$rowid <- rep(1:(sum(!i)-2), head(diff(which(!i))-1, -1))
+  dfout <- as.data.frame(tidyr::pivot_wider(dflong, rowid, names_from=V1, values_from=V2))[,-1, drop=FALSE]
+  
+  if(!is.null(usertag)){
+    if(!usertag %in% names(dfout)) stop("usertag not found in metadata")
+    utags <- split.tags(dfout[,usertag], tagsep, valsep)
+    dfout <- cbind(dplyr::select(dfout, -usertag), utags)
+  }
+  
+  dfout
 }
 
 
@@ -97,7 +159,8 @@ list.files.only <- function(path, ...){
   res
 }
 
-
+list.files("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/Archive/Gee data",
+          full.names=T, include.dirs = FALSE, recursive=T)
 #VIDEO PROCESSING FUNCTIONS#############################################
 
 
@@ -419,9 +482,42 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 
 #DATA PREP FUNCTIONS#############################################
 
+#split.tags#
+
+#Splits out multi-field tags entered as single strings. Records must be strings
+#taking the form: "Field1: value1, Field2: value2". In this default case, commas (", ")
+# separate field data, and colons (": ") separate field names from values within
+#fields, although the separators used can be changed through input.
+
+#INPUT
+# dat: a vector of character strings (see above for expected form)
+# tagsep: the character or string used to separate fields within strings
+# valsep: the character or string used to separate field names from values within fields
+
+#OUTPUT
+#A data frame with a row per record in dat, and a column for each field name found in dat.
+#Where a field name is not given for a record, a missing value is assigned.
+
+split.tags <- function(dat, tagsep=", ", valsep=": "){
+  tagmatches <- unlist(lapply(gregexpr(tagsep, dat), function(x) sum(x>0)))
+  valmatches <- unlist(lapply(gregexpr(valsep, dat), function(x) sum(x>0)))
+  if(!all((valmatches-tagmatches)==1, na.rm=TRUE)) 
+    stop("There's a problem with the use of separators in dat")
+  
+  lst <- strsplit(dat, tagsep)
+  longdf <- lst %>% lapply(strsplit, valsep) %>% unlist() %>% 
+    matrix(ncol=2, byrow=TRUE) %>% as.data.frame()
+  longdf$rowid <- rep(1:length(dat), unlist(lapply(lst, length)))
+  widedf <- longdf %>% tidyr::pivot_wider(rowid, names_from=V1, values_from=V2) %>%
+    as.data.frame() %>% utils::type.convert(as.is=TRUE)
+  dplyr::select(widedf, -rowid)
+}
+
 #split.annotations#
 
-#Splits out multi-field annotations entered as a single field
+#Splits out multi-field annotations entered as a single field. Superceded by split annotations,
+#(which allows varying number of fields per record, and requires field names), but may still
+#be useful somewhere.
 
 #INPUT
 # dat: a vector of data containing multiple field separated by a given character, sep
@@ -441,13 +537,12 @@ split.annotations <- function(dat, colnames=NULL, sep=";"){
     if(seps!=length(colnames))
       stop("Number of column names is not equal to the number of annotations")
   
-  d <- data.frame(Reduce(rbind, lst), stringsAsFactors=F)
+  d <- data.frame(?Reduce(rbind, lst), stringsAsFactors=F)
   d <- type.convert(d, as.is=T)
   names(d) <- colnames
   rownames(d) <- NULL
   d
 }
-
 
 #read.digidat#
 
