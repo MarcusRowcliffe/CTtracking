@@ -74,8 +74,9 @@ peep.exif <- function(path, file.index=1){
     if(file.index<1 | file.index>n) stop(paste0("file.index must be between 1 and ", length(allfls), " (the number of files in ", path, ")"))
     path <- allfls[file.index]
   }
-  res <- read.exif2(path)
-  data.frame(Tag=names(res), Value=as.character(res[1,]), stringsAsFactors=FALSE)
+  res <- read.exif(path)
+  vals <- substr(as.character(res[1,]), 1, 40)
+  data.frame(Tag=names(res), Value=vals, stringsAsFactors=FALSE)
 }
 
 #read.exif#
@@ -104,7 +105,7 @@ peep.exif <- function(path, file.index=1){
 #tooldir is a folder named exiftool within the current R library (see install.exiftool).
 #Non-existent tags are ignored without a warning, no valid tag names is an error.
 
-read.exif <- function(dir, tags="", usertag=NULL, tagsep=", ", valsep=": ", tooldir=NULL){
+read.exif <- function(path, tags="", usertag=NULL, tagsep=", ", valsep="/", toolpath=NULL){
   if(length(path)>1) stop("path must be a string pointing to a single directory or file")
   if(is.null(toolpath)) toolpath <- file.path(.libPaths()[1], "exiftool")
   if(!file.exists(file.path(toolpath,"exiftool.exe"))) stop(paste("Can't find", file.path(toolpath,"exiftool.exe")))
