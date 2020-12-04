@@ -486,8 +486,8 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 #split.tags#
 
 #Splits out multi-field tags entered as single strings. Records must be strings
-#taking the form: "Field1: value1, Field2: value2". In this default case, commas (", ")
-# separate field data, and colons (": ") separate field names from values within
+#taking the form: "Field1/value1, Field2/value2". In this default case, commas (", ")
+# separate field data, and slashes ("/") separate field names from values within
 #fields, although the separators used can be changed through input.
 
 #INPUT
@@ -499,24 +499,30 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 #A data frame with a row per record in dat, and a column for each field name found in dat.
 #Where a field name is not given for a record, a missing value is assigned.
 
-split.tags <- function(dat, tagsep=", ", valsep=": "){
+split.tags <- function(dat, tagsep=", ", valsep="/"){
   tagmatches <- unlist(lapply(gregexpr(tagsep, dat), function(x) sum(x>0)))
   valmatches <- unlist(lapply(gregexpr(valsep, dat), function(x) sum(x>0)))
   if(!all((valmatches-tagmatches)==1, na.rm=TRUE)) 
     stop("There's a problem with the use of separators in dat")
   
   lst <- strsplit(dat, tagsep)
-  longdf <- lst %>% lapply(strsplit, valsep) %>% unlist() %>% 
-    matrix(ncol=2, byrow=TRUE) %>% as.data.frame()
+  lst[unlist(lapply(lst, function(x) any(is.na(x))))] <- "NA/NA"
+  longdf <- lst %>% 
+    lapply(strsplit, valsep) %>% 
+    unlist() %>% 
+    matrix(ncol=2, byrow=TRUE) %>% 
+    as.data.frame()
   longdf$rowid <- rep(1:length(dat), unlist(lapply(lst, length)))
-  widedf <- longdf %>% tidyr::pivot_wider(rowid, names_from=V1, values_from=V2) %>%
-    as.data.frame() %>% utils::type.convert(as.is=TRUE)
-  dplyr::select(widedf, -rowid)
+  widedf <- longdf %>% 
+    tidyr::pivot_wider(rowid, names_from=V1, values_from=V2) %>%
+    as.data.frame() %>% 
+    utils::type.convert(as.is=TRUE)
+  widedf[, !names(widedf) %in% c("rowid", "NA")]
 }
 
 #split.annotations#
 
-#Splits out multi-field annotations entered as a single field. Superceded by split annotations,
+#Splits out multi-field annotations entered as a single field. Superceded by split.tags,
 #(which allows varying number of fields per record, and requires field names), but may still
 #be useful somewhere.
 
