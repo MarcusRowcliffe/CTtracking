@@ -160,8 +160,7 @@ list.files.only <- function(path, ...){
   res
 }
 
-list.files("C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/Archive/Gee data",
-          full.names=T, include.dirs = FALSE, recursive=T)
+
 #VIDEO PROCESSING FUNCTIONS#############################################
 
 
@@ -499,20 +498,6 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 #A data frame with a row per record in dat, and a column for each field name found in dat.
 #Where a field name is not given for a record, a missing value is assigned.
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
-dat <- c("A/1, B/2", "A/3", NA, "C/2", "B/6, A/4, D/8", NA, NA)
-lst
-lst[unlist(lapply(lst, function(x) any(is.na(x))))] <- "NA/NA"
-lst2 <- lapply(lst, strsplit, valsep)
-lst2[[7]][[1]]
-q <- dplyr::select(widedf, -c(rowid, "NA"))
-is.na(q$A)
-  
->>>>>>> 03e725183f517d5aa45ac88b736f0be4c589d789
->>>>>>> aa27e0b39ee1e2b6d034682453721c7ff6288dd3
 split.tags <- function(dat, tagsep=", ", valsep="/"){
   tagmatches <- unlist(lapply(gregexpr(tagsep, dat), function(x) sum(x>0)))
   valmatches <- unlist(lapply(gregexpr(valsep, dat), function(x) sum(x>0)))
@@ -531,15 +516,7 @@ split.tags <- function(dat, tagsep=", ", valsep="/"){
     tidyr::pivot_wider(rowid, names_from=V1, values_from=V2) %>%
     as.data.frame() %>% 
     utils::type.convert(as.is=TRUE)
-<<<<<<< HEAD
   widedf[, !names(widedf) %in% c("rowid", "NA")]
-=======
-<<<<<<< HEAD
-  widedf[, !names(widedf) %in% c("rowid", "NA")]
-=======
-  dplyr::select(widedf, -c(rowid, "NA"))
->>>>>>> 03e725183f517d5aa45ac88b736f0be4c589d789
->>>>>>> aa27e0b39ee1e2b6d034682453721c7ff6288dd3
 }
 
 #split.annotations#
