@@ -137,7 +137,7 @@ read.exif <- function(path, tags="", usertag=NULL, tagsep=", ", valsep="/", tool
   if(!is.null(usertag)){
     if(!usertag %in% names(dfout)) stop("usertag not found in metadata")
     utags <- split.tags(dfout[,usertag], tagsep, valsep)
-    dfout <- cbind(dplyr::select(dfout, -usertag), utags)
+    dfout <- cbind(dplyr::select(dfout, -any_of(usertag)), utags)
   }
   
   dfout
