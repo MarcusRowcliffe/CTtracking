@@ -76,8 +76,9 @@ peep.exif <- function(path, file.index=1){
   }
   res <- read.exif(path)
   vals <- substr(as.character(res[1,]), 1, 40)
-  data.frame(Tag=names(res), Value=vals, stringsAsFactors=FALSE)
+  data.frame(TAG=names(res), VALUE=vals, stringsAsFactors=FALSE)
 }
+
 
 #read.exif#
 
@@ -90,9 +91,8 @@ peep.exif <- function(path, file.index=1){
 # path: a single character string giving a path to folder or file
 # tags: a character vector of tag names to extract
 # usertag: a single character string giving the name of a tag containing user annotations
-# tagsep: the character or string used to separate fields within strings
-# valsep: the character or string used to separate field names from values within fields
 # toolpath: a character string giving the path of the folder containing exiftool.exe
+# ...: additional arguments passed to split.tags (tagsep and valsep)
 
 #OUTPUT
 #A dataframe of metadata. 
@@ -105,7 +105,7 @@ peep.exif <- function(path, file.index=1){
 #tooldir is a folder named exiftool within the current R library (see install.exiftool).
 #Non-existent tags are ignored without a warning, no valid tag names is an error.
 
-read.exif <- function(path, tags="", usertag=NULL, tagsep=", ", valsep="/", toolpath=NULL){
+read.exif <- function(path, tags="", usertag=NULL, toolpath=NULL, ...){
   if(length(path)>1) stop("path must be a string pointing to a single directory or file")
   if(is.null(toolpath)) toolpath <- file.path(.libPaths()[1], "exiftool")
   if(!file.exists(file.path(toolpath,"exiftool.exe"))) stop(paste("Can't find", file.path(toolpath,"exiftool.exe")))
@@ -136,7 +136,7 @@ read.exif <- function(path, tags="", usertag=NULL, tagsep=", ", valsep="/", tool
   
   if(!is.null(usertag)){
     if(!usertag %in% names(dfout)) stop("usertag not found in metadata")
-    utags <- split.tags(dfout[,usertag], tagsep, valsep)
+    utags <- split.tags(dfout[,usertag], ...)
     dfout <- cbind(dplyr::select(dfout, -any_of(usertag)), utags)
   }
   
@@ -498,7 +498,8 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 #A data frame with a row per record in dat, and a column for each field name found in dat.
 #Where a field name is not given for a record, a missing value is assigned.
 
-split.tags <- function(dat, tagsep=", ", valsep="/"){
+split.tags <- function(dat, tagsep=", ", valsep="|"){
+  valsep <- paste0("\\", valsep)
   tagmatches <- unlist(lapply(gregexpr(tagsep, dat), function(x) sum(x>0)))
   valmatches <- unlist(lapply(gregexpr(valsep, dat), function(x) sum(x>0)))
   if(!all((valmatches-tagmatches)==1, na.rm=TRUE)) 
