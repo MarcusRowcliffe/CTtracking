@@ -68,8 +68,9 @@ peep.exif <- function(path, file.index=1){
   if(!file.exists(path)) stop("path not found")
   if(dir.exists(path)){
     allfls <- list.files(path, full.names=TRUE, recursive=TRUE)
+    allfls <- allfls[grep(".jpg", allfls, ignore.case=TRUE)]
     n <- length(allfls)
-    if(n==0) stop(paste("No files found in", path))
+    if(n==0) stop(paste("No files jpg found in", path))
     if(length(file.index)>1 | class(file.index)!="numeric") stop("file.index must be a single integer")
     if(file.index<1 | file.index>n) stop(paste0("file.index must be between 1 and ", length(allfls), " (the number of files in ", path, ")"))
     path <- allfls[file.index]
@@ -106,6 +107,7 @@ peep.exif <- function(path, file.index=1){
 #Non-existent tags are ignored without a warning, no valid tag names is an error.
 
 read.exif <- function(path, tags="", usertag=NULL, toolpath=NULL, ...){
+  path <- normalizePath(path)
   if(length(path)>1) stop("path must be a string pointing to a single directory or file")
   if(is.null(toolpath)) toolpath <- file.path(.libPaths()[1], "exiftool")
   if(!file.exists(file.path(toolpath,"exiftool.exe"))) stop(paste("Can't find", file.path(toolpath,"exiftool.exe")))
@@ -499,16 +501,15 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 #Where a field name is not given for a record, a missing value is assigned.
 
 split.tags <- function(dat, tagsep=", ", valsep="|"){
-  valsep <- paste0("\\", valsep)
   tagmatches <- unlist(lapply(gregexpr(tagsep, dat), function(x) sum(x>0)))
-  valmatches <- unlist(lapply(gregexpr(valsep, dat), function(x) sum(x>0)))
+  valmatches <- unlist(lapply(gregexpr(paste0("\\", valsep), dat), function(x) sum(x>0)))
   if(!all((valmatches-tagmatches)==1, na.rm=TRUE)) 
     stop("There's a problem with the use of separators in dat")
   
   lst <- strsplit(dat, tagsep)
-  lst[unlist(lapply(lst, function(x) any(is.na(x))))] <- "NA/NA"
+  lst[unlist(lapply(lst, function(x) any(is.na(x))))] <- paste0("NA",valsep,"NA")
   longdf <- lst %>% 
-    lapply(strsplit, valsep) %>% 
+    lapply(strsplit, paste0("\\", valsep)) %>% 
     unlist() %>% 
     matrix(ncol=2, byrow=TRUE) %>% 
     as.data.frame()
