@@ -13,7 +13,7 @@
 #When digitising with multiple fields in the sequence_annotation box, use a semicolon separator
 #e.g. for a point digitised 0.5 m up a pole at 6 m from the camera, use annotation 0.5;6.
 
-#If reading metadata from a previously prepared csv file, set strignsAsFactors=FALSE.
+#If reading metadata from a previously prepared csv file, set stringsAsFactors=FALSE.
 #ISSUE? fail if time used but in factor format, with mesasge suggesting above solution 
 #(or just convert to character silently)
 
@@ -21,30 +21,35 @@
 require(magick)
 require(tidyr)
 
-setClass("camcal", representation("list"))
-setClass("sitecal", representation("list"))
-setClass("calibration", representation("list"))
+camcal <- setClass("camcal", representation("list"))
+depcal <- setClass("depcal", representation("list"))
+calibs <- setClass("calibs", representation("list"))
 
 #GENERAL FUNCTIONS#############################################
 
 #install.exiftool#
 
-#Downloads exiftool Windows executable from exiftool.org and prepares it for 
-#use locally.
+#Downloads latest version of exiftool Windows executable from 
+#exiftool.org and prepares it for use locally.
 
 #INPUT
 # dir: character string giving the directory in which to place exiftool
 
 #DETAILS
 #When dir is NULL (the default), exiftool is placed in a folder called exiftool
-#in the current R library, indentifed using .libPaths(). The exiftool folder 
-#is created if it doesn't already exist.
+#in the current R library, indentified using .libPaths(). A folder named exiftool 
+#is created if it doesn't already exist. An alternative to this function
+#is to download manually. For this, download ExifTool from exiftool.org, unzip
+#and rename the exiftool(-k).exe file to exiftool.exe, and place it in a relevant
+#folder.
 
 install.exiftool <- function(dir=NULL){
   if(is.null(dir)) dir <- file.path(.libPaths()[1], "exiftool")
   if(!dir.exists(dir)) dir.create(dir)
   zipout <- file.path(dir, "temp.zip")
-  utils::download.file("https://exiftool.org/exiftool-12.07.zip", zipout)
+  ver <- readLines("https://exiftool.org/ver.txt", warn=FALSE)
+  website <- paste0("https://exiftool.org/exiftool-", ver, ".zip")
+  utils::download.file(website, zipout)
   utils::unzip(zipout, exdir=dir)
   file.remove(zipout)
   filenm <- file.path(dir, "exiftool.exe")
@@ -55,7 +60,8 @@ install.exiftool <- function(dir=NULL){
 
 #peep.exif#
 
-#Extracts exif data from a single file for inspection prior to extracting a whole folder.
+#Extract metadata data from a single image file for inspection prior to 
+#extracting a whole folder. 
 
 #INPUT
 # path: a single character string giving a path to folder or file
@@ -63,6 +69,10 @@ install.exiftool <- function(dir=NULL){
 
 #OUTPUT
 #A two-column dataframe of metadata (Tag and Value). 
+
+#DETAILS
+#Runs command line executable exiftool, which must be present locally (see 
+#install.exiftool).
 
 peep.exif <- function(path, file.index=1){
   if(!file.exists(path)) stop("path not found")
@@ -76,37 +86,47 @@ peep.exif <- function(path, file.index=1){
     path <- allfls[file.index]
   }
   res <- read.exif(path)
-  vals <- substr(as.character(res[1,]), 1, 40)
-  data.frame(TAG=names(res), VALUE=vals, stringsAsFactors=FALSE)
+  vals <- as.character(res[1,])
+  data.frame(Field=names(res), Value=vals, stringsAsFactors=FALSE)
 }
 
 
 #read.exif#
 
-#Runs command line executable exiftool.exe (see exiftool.org) to extract metadata of
-#all files within a directory and its subdirectories. Before using this function for
-#the first time, run install.exiftool(), or download manually, unzip and rename the
-#exiftool(-k).exe file to exiftool.exe.
+#Extract metadata from image files (*.jpg)
 
 #INPUT
 # path: a single character string giving a path to folder or file
-# tags: a character vector of tag names to extract
-# usertag: a single character string giving the name of a tag containing user annotations
+# fields: a character vector of field names to extract, optionally named (see details)
+# tagfield: a single character string giving the name of a field containing user tags
 # toolpath: a character string giving the path of the folder containing exiftool.exe
-# ...: additional arguments passed to split.tags (tagsep and valsep)
+# ...: additional arguments passed to split.tags
 
 #OUTPUT
-#A dataframe of metadata. 
+#A dataframe of image metadata. 
 
 #DETAILS
-#By default (tags=""), all available tags are extracted. If usertag is provided, this
-#tag will be separated into multiple columns in the output using split.tags, based on 
-#tagsep and valsep values (these are ignored if usertag=NULL). If you only want separated 
-#usertag data, tags can be set to NULL to suppress additional tag extraction. By default, 
-#tooldir is a folder named exiftool within the current R library (see install.exiftool).
-#Non-existent tags are ignored without a warning, no valid tag names is an error.
+#Runs command line executable exiftool, which must be present locally (see 
+#install.exiftool). Metadata is extracted from all jpeg images in the directory 
+#defined by path and all its subdirectories.
+#
+#By default (fields=""), all available tags are extracted. Fields that don't 
+#exist in the metadata are ignored with a warning. If no valid fields are 
+#found the function fails. The names of any values in fields are assigned to the
+#respective columns in the resulting dataframe, otherwise the original field 
+#name is preserved.
+#
+#If tagfield is provided, this field will be separated into 
+#multiple columns in the output using split.tags, with additional arguments 
+#passed to this function (specifically tagsep and valsep, defining the tag and 
+#value separation strings). If you only want separated tagfield data, fields can
+#be set to NULL to suppress extraction of additional fields.
+#
+#By default (toolpath=NULL), the function expects to find the exiftool.exe file 
+#in a folder named exiftool within the current R library, where the 
+#install.exiftool function places it.
 
-read.exif <- function(path, tags="", usertag=NULL, toolpath=NULL, ...){
+read.exif <- function(path, fields="", tagfield=NULL, toolpath=NULL, ...){
   path <- normalizePath(path)
   if(length(path)>1) stop("path must be a string pointing to a single directory or file")
   if(is.null(toolpath)) toolpath <- file.path(.libPaths()[1], "exiftool")
@@ -115,34 +135,45 @@ read.exif <- function(path, tags="", usertag=NULL, toolpath=NULL, ...){
   if(dir.exists(path)) nfiles <- length(list.files(path, recursive = TRUE)) else nfiles <- 1
   if(nfiles==0) stop(paste("No files found in", path))
   
-  if(!is.null(usertag) & !is.null(tags)) if(any(grepl(usertag, tags, ignore.case = TRUE)))
-    tags <- tags[!grepl(usertag, tags, ignore.case=TRUE)]
-  if(!"" %in% tags){
-    tags <- c(tags, usertag)
-    if(is.null(tags)) stop("No tags or usertag defined")
-    tags <- paste(paste0("-", tags), collapse=" ")
+  if(is.null(fields) & is.null(tagfield)) stop("No fields or tagfield defined")
+  ff <- fields
+  if(!"" %in% fields){
+    if(!is.null(tagfield))
+      if(!tagfield %in% fields) fields <- c(fields, tagfield)
+    ff <- paste(paste0("-", fields), collapse=" ")
   }
-  
-  cmd <- paste("exiftool -ext jpg -r -t -s", tags, paste0('"', path, '"'))
+
+  cmd <- paste("exiftool -ext jpg -r -t -s", ff, paste0('"', path, '"'))
   wd <- getwd()
   setwd(toolpath)
   txtout <- shell(cmd, intern=TRUE)
   setwd(wd)
   
   i <- grepl("\t", txtout)
-  if(sum(i)==0) stop("No matching tags found in metadata")
+  if(sum(i)==0) stop("No matching fields found in metadata")
   dflong <- read.table(text=txtout[i], stringsAsFactors = FALSE, sep="\t")
   if(nfiles==1) dflong$rowid <- 1 else
     dflong$rowid <- rep(1:(sum(!i)-2), head(diff(which(!i))-1, -1))
   dfout <- as.data.frame(tidyr::pivot_wider(dflong, rowid, names_from=V1, values_from=V2))[,-1, drop=FALSE]
   
-  if(!is.null(usertag)){
-    if(!usertag %in% names(dfout)) stop("usertag not found in metadata")
-    utags <- split.tags(dfout[,usertag], ...)
-    dfout <- cbind(dplyr::select(dfout, -any_of(usertag)), utags)
+  if(!"" %in% fields){
+    notfound <- fields[!fields %in% names(dfout)]
+    if(length(notfound)>0) 
+      warning(paste("Some fields not found in metadata:", paste(notfound, collapse=", ")))
+  }
+  if(!is.null(names(fields))){
+    nms <- names(fields)[match(names(dfout), fields)]
+    names(dfout) <- ifelse(nms=="", names(dfout), nms)
   }
   
-  dfout
+  if(!is.null(tagfield)){
+    if(tagfield %in% names(dfout)){
+      utags <- split.tags(dfout[,tagfield], ...)
+      dfout <- cbind(dplyr::select(dfout, -any_of(tagfield)), utags)
+    }
+  }
+  
+  type.convert(dfout, as.is=TRUE)
 }
 
 
@@ -161,7 +192,6 @@ list.files.only <- function(path, ...){
   if(!fn) res <- basename(res)
   res
 }
-
 
 #VIDEO PROCESSING FUNCTIONS#############################################
 
@@ -486,19 +516,23 @@ crop <- function(inpath, outpath, exf=NULL, dimensions=NULL, suffix=""){
 
 #split.tags#
 
-#Splits out multi-field tags entered as single strings. Records must be strings
-#taking the form: "Field1/value1, Field2/value2". In this default case, commas (", ")
-# separate field data, and slashes ("/") separate field names from values within
-#fields, although the separators used can be changed through input.
+#Splits out multi-field tags which appear as a single field in image metadata,
+#following image tagging in, for example, XnView, Photoshop, Digikam.
 
 #INPUT
-# dat: a vector of character strings (see above for expected form)
+# dat: a vector of character strings (see details for expected form)
 # tagsep: the character or string used to separate fields within strings
 # valsep: the character or string used to separate field names from values within fields
 
 #OUTPUT
-#A data frame with a row per record in dat, and a column for each field name found in dat.
-#Where a field name is not given for a record, a missing value is assigned.
+#A data frame with a row per record in dat, and a column for each field name 
+#found in dat. Where a field name is not given for a record, a missing value
+#is assigned.
+
+#DETAILS
+#The default values for tagsep (", ") and valsep ("|") work for default 
+#hierarchical tag output from XnView (www.xnview.com). In this case, records
+#in dat must be strings taking the form: "Field1|value1, Field2|value2".
 
 split.tags <- function(dat, tagsep=", ", valsep="|"){
   tagmatches <- unlist(lapply(gregexpr(tagsep, dat), function(x) sum(x>0)))
@@ -521,174 +555,72 @@ split.tags <- function(dat, tagsep=", ", valsep="|"){
   widedf[, !names(widedf) %in% c("rowid", "NA")]
 }
 
-#split.annotations#
-
-#Splits out multi-field annotations entered as a single field. Superceded by split.tags,
-#(which allows varying number of fields per record, and requires field names), but may still
-#be useful somewhere.
-
-#INPUT
-# dat: a vector of data containing multiple field separated by a given character, sep
-# colnames: a vector of the names to assign to output columns
-# sep: the character defining field breaks within dat
-
-#OUTPUT
-# A dataframe with one column per field from the input data. The function fails if not all 
-# entries in dat have the same number of sep characters (implying different numbers of columns),
-# or if the number of colnames doesn't equal the number of columns in dat.
-split.annotations <- function(dat, colnames=NULL, sep=";"){
-  lst <- strsplit(as.character(dat), sep)
-  seps <- unique(unlist(lapply(lst, length)))
-  
-  if(length(seps)>1) stop("Not all annotations have the same number of entries")
-  if(is.null(colnames)) colnames <- paste0("X",1:seps) else
-    if(seps!=length(colnames))
-      stop("Number of column names is not equal to the number of annotations")
-  
-  d <- data.frame(?Reduce(rbind, lst), stringsAsFactors=F)
-  d <- type.convert(d, as.is=T)
-  names(d) <- colnames
-  rownames(d) <- NULL
-  d
-}
 
 #read.digidat#
 
-#Reads and merges csv files of digitisation data from animaltracker tool.
-
-#- Input path should point to a directory containing the digisation data csv files in its root.
-#- The root path must contain ONLY those csv files to be processed.
-#- The csv file names are assumed to be site IDs.
-#- The function optionally adds metadata from the original images. 
-#- In cases where images are a mix of image and video frame, the function also optionally
-#  translates x,y pixel positions from image to video scale or vice versa.
-#- If EITHER pixel translation OR exifcols are specified (ie trans.xy is not "none" OR exifcols is
-#  not NULL) image exif data are needed from the digitised images. In this case, EITHER exifdat must
-#  be provided, OR the necessary images must be present within (sub-directories of) path and the
-#  function will read exif data from there.
-#- IMPORTANT: where images from different directories may not have unique names,
-#  exifdata must be provided for cross-referencing.
+#Reads and merges multiple csv files of digitisation data from animaltracker, 
+#and optionally adds relevant image metadata.
 
 #INPUT
-# path: name of directory containing all required files (see above).
-# exifdat: either a character path to a folder containing images from which to extract exif data, or
-#    a dataframe containing the appropriate metadata
-# annotations: a character vector of column names to give to annotations from the digitisation data
-# pair: whether or not to pair up paired pole digitisation points for calibration (leave as FALSE for animal points)
-# exifcols: data columns from exifdata to add to the merged dataframe, in addition
-#           to defaults (Directory, CreateDate, ImageHeight and ImageWidth).
-# trans.xy: type of pixel translation to apply, with options:
-#   "none": no translation
-#   "img.to.vid": all image file pixel positions are translated to the video scale
-#   "vid.to.img": all video file pixel positions are translated to the image scale
+# path: character path to folder containing all required files
+# exifdat: a dataframe containing the relevant image metadata (see output)
 
 #OUTPUT
-# A dataframe of the original digitisation data, with sequence_id column reassigned to give
-# unique values to each sequence across the whole dataframe (with original IDs preserved as
-# sequence_id_original), plus new column group_id holding values taken from input csv file names.
-# Optionally, x,y values are translated from image to video scale or vice versa, with original
-# x,y values are preserved x.original,y.original. Also optionally, columns specified by exifcols
-# input are added from the image metadata.
+# A dataframe of the original digitisation data plus:
+#  - sequence_id: reassigned to give unique values to each sequence across the 
+#    whole dataframe
+#  - sequence_id_original: the original directory-specific sequence IDs
+#  - dir: full path to the containing directory
+#  - folder: name of the containing folder
+#  - image metadata from exifdat (if provided), matched using directory/file 
+#    combinations; columns dir and file must be present in exifdat for this
+#    purpose.
 
-read.digidat <- function(path, exifdat=NULL, exifcols=NULL,
-                         datatype=c("pole", "animal", "both"),
-                         trans.xy=c("none", "img.to.vid", "vid.to.img")){
+read.digidat <- function(path, exifdat=NULL){
   renumber <- function(x) c(0, cumsum(head(x, -1)!=tail(x, -1)))
-  datatype <- match.arg(datatype)
-  trans.xy <- match.arg(trans.xy)
-  
-  files <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE)
-  if(length(files)==0) stop("No csv files found in path")
-  df.list <- lapply(files, read.csv, stringsAsFactors=FALSE)
+
+  csvfiles <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE, recursive=TRUE)
+  if(length(csvfiles)==0) stop("No csv files found in path")
+  df.list <- lapply(csvfiles, read.csv, stringsAsFactors=FALSE)
   
   colnames <- lapply(df.list, names)
   n_columns <- unlist(lapply(colnames, length))
   if(length(unique(n_columns)) > 1){
-    message("Error: Not all files have the same number of columns - check output data")
-    return(data.frame(file=basename(files), n_columns))
+    message("Error: Not all csv files have the same number of columns - check output data")
+    return(data.frame(file=csvfiles, n_columns))
   }
   colnames <- matrix(unlist(colnames), ncol=length(colnames))
   if(any(apply(colnames, 1, function(x) length(unique(x))) != 1)){
-    message("Error: Not all files have the same column headings - check output data")
-    return(data.frame(file=basename(files), t(colnames)))
-  }
-
-  df <- dplyr::bind_rows(df.list)
-  if("height" %in% names(df))
-    df$height <- as.numeric(df$height) else
-    if(datatype!="animal")
-      stop("If data contains pole digitisations, input must contain a column named height")
-    
-  dirs <- tools::file_path_sans_ext(basename(files)) #unique dirs digitised
-  df$group_id <- rep(dirs, unlist(lapply(df.list, nrow)))
-  df$sequence_id_original <- df$sequence_id
-  df$sequence_id <- renumber(paste0(df$group_id, df$sequence_id))
-
-  if(!is.null(exifdat) | trans.xy!="none"){
-    if(is.null(exifdat)) stop("exifdat must be provided if trans.xy (pixel translation) is specified")
-    
-    exifcols <- unique(c("Directory", "CreateDate", "ImageHeight", "ImageWidth", exifcols))
-    if(is.character(exifdat)) exifdat <- read.exif(exifdat)
-    exifdirs <- unique(basename(exifdat$Directory)) #unique dirs in image exifdat
-    missingdirs <- dirs[!dirs %in% exifdirs] #unique dirs in digidat but not in exif dat
-    df$filename <- file.path(dirname(exifdat$Directory[1]), df$group_id, df$image_name)
-    
-    if(length(missingdirs)>0){
-      cat(paste0(missingdirs,".csv"), sep="\n")
-      message("Warning: The above csv files have no matching image directories in exifdat.\nTheir data were stripped out")
-      df <- subset(df, !df$group_id %in% missingdirs)
-    }
-    
-    i <- match(df$filename, exifdat$SourceFile)
-    if(any(is.na(i))){
-      cat(df$filename[is.na(i)], sep="\n")
-      message("Warning: The above digitised images couldn't be found in exif data and were stripped out")
-      notna <- !is.na(i)
-      df <- df[notna,]
-      i <- i[notna]
-    }
-    exifdat <- exifdat[i, ]
-    addn <- data.frame(exifdat[, exifcols])
-    names(addn) <- exifcols
-    df <- cbind(df, addn)
-    if("CreateDate" %in% names(df) & length(unique(nchar(df$CreateDate)))==1)
-      df$TimeOfDay <- decimal.time(df$CreateDate)
-    rownames(df) <- 1:nrow(df)
-  }
-  if(nrow(df)==0) stop("No data useable data found!")
-
-  if(trans.xy=="none"){
-    df$xdim <- exifdat$ImageWidth
-    df$ydim <- exifdat$ImageHeight
-  } else{
-    if(!"VideoHeight" %in% names(exifdat))
-      stop("No video dimension info found in image metadata - must be there if pixel translation is specified (trans.xy!=\"none\"")
-
-    df$x.original <- df$x
-    df$y.original <- df$y
-    if(trans.xy=="img.to.vid"){
-      j <- exifdat$FileSource!="" & !is.na(exifdat$VideoHeight)
-      df$x[j] <- with(exifdat[j,], VideoWidth * (df$x[j]-VideoXorigin) / VideoWidthOnImage)
-      df$y[j] <- with(exifdat[j,], VideoHeight * (df$y[j]-VideoYorigin) / VideoHeightOnImage)
-      df$xdim <- with(exifdat, ifelse(is.na(VideoWidth), ImageWidth, VideoWidth))
-      df$ydim <- with(exifdat, ifelse(is.na(VideoHeight), ImageHeight, VideoHeight))
-    } else{
-      j <- exifdat$FileSource=="" & !is.na(exifdat$VideoHeight)
-      df$x[j] <- with(exifdat[j,], VideoXorigin + VideoWidthOnImage*df$x[j] / VideoWidth)
-      df$y[j] <- with(exifdat[j,], VideoYorigin + VideoHeightOnImage*df$y[j] / VideoHeight)
-      df$xdim <- unique(exifdat[!j,]$ImageWidth)
-      df$ydim <- unique(exifdat[!j,]$ImageHeight)
-    }
+    message("Error: Not all csv files have the same column headings - check output data")
+    return(data.frame(file=csvfiles, t(colnames)))
   }
   
-  res <- switch(datatype,
-                "animal" = res <- df,
-                "pole" = make.pairdat(df),
-                "both" = list(animal=subset(df, name!=""), 
-                              pole=make.pairdat(subset(df, !is.na(height)))
-                              )
-  )
-  res
+  pths <- rep(normalizePath(dirname(csvfiles), winslash="/"),
+              unlist(lapply(df.list, nrow)))
+  df <- cbind(dir = pths,
+              folder = basename(pths),
+              dplyr::bind_rows(df.list))
+  
+  if("height" %in% names(df))
+    df$height <- as.numeric(df$height) else
+      if(pair)
+        stop("If data contains pole digitisation pairs, input must contain a column named height")
+
+  sicol <- which(names(df)=="sequence_id")
+  df <- cbind(df[,1:sicol], sequence_id_original=df$sequence_id, df[,(sicol+1):ncol(df)])
+  df$sequence_id <- renumber(paste0(df$dir, df$sequence_id))
+  
+  if(!is.null(exifdat)){
+    if(!all(c("dir", "file") %in% names(exifdat)))
+      stop("exifdat must contain at least columns dir and file for matching")
+    dfsource <- file.path(df$dir, df$image_name)
+    exifsource <- file.path(exifdat$dir, exifdat$file)
+    nmiss <- sum(!dfsource %in% exifsource)
+    if(nmiss>0)
+      stop(paste(nmiss, "out of", nrow(df), "digitised images not found in metadata"))
+    df <- cbind(df, exifdat[match(dfsource, exifsource), !names(exifdat) %in% c("dir", "file")])
+  }
+  df
 }
 
 
@@ -720,57 +652,72 @@ decimal.time <- function(dat, sep=":"){
 }
 
 
-#make.pairdat#
+#pairup#
 
-#Converts a dataframe of digitisation data to a "paired up" format, with  one row per 
-#pole, animal or other object. Input data must have at least fields x and y (pixel positions), 
-#plus either an object identifier field (pair_id) or an image file name field (filename). 
-#If filename is provided but not pair_id, filename is taken to be the object identifier,
-#comined with Directory if this is present. Specific additional fields, when present,
-#must use the following names:
-# Directory: full path to the directory containing the digitised image
-# distance: distance from camera; required for camera calibration
-# length: length of pole digitised; required for camera calibration and distance estimation
-# height: height of digitised point off the ground; required for site calibration
+#Matches up points digitised in pairs
 
 #INPUT
-# dat: dataframe of digitisation data.
+# dat: dataframe of digitisation data
+# pairtag: a vector of one or more strings giving the name(s) of the column(s)
+#          in dat the combination of which uniquely defines digitisation pairs
 
 #OUTPUT
-# A dataframe with the two ditisation points per pole/animal arranged in single rows.
-# Returns the input data minus x, y and sequence_annotation, plus columns:
-#  xb, yb, xt, yt: x and y co-ordinates of pole b(ottom) and t(op) positions digitised
-#  hb, ht: actual heights above ground of the digitised pole positions
-# A single point per pole can be digitise, but only for site calibration, and only if distance is
-# also provided and height=0. Where a single pole is digitised at height 0, xt and yt values are imputed at ht=1.
-# Pole records are discarded with a warning if:
-#  1. they have non-numeric distance, length or height values;
-#  2. they are digitised more than twice;
-#  3. they are digitised only once at height > 0;
-#  4. conflicting distance values are given for two digitisation points.
+# A dataframe with the two digitisation points per object arranged in single rows.
 
-make.pairdat <- function(dat){
+#DETAILS
+#Generates a dataframe of paired digitisation points for input to calc.distance, 
+#either directly, or via cal.dep.
 
-  pairup <- function(dat){
+#Input dat must have at least columns x and y (pixel positions) and the columns
+#defined by pairtag. There are three additional data columns that must have
+#specific names if provided:
+# height: height above ground of the digitised points
+# distance: distance of the digitised points from camera
+# length: length or size of the digitised object between the points of a pair
+
+#The output dataframe contains the input data unchanged, except that 
+#sequence_annotation is renumbered to give unique values across the whole 
+#dataframe, columns x, y and (if present) height are removed, and the following
+#columns are added:
+#  sequence_annotation_original: the original sequence identifier unchanged
+#  pair_id: the pair identifier, derived from column(s) given in the pairtag argument
+#  xb, yb, xt, yt: pixel x and y co-ordinates of pole b(ottoms) and t(ops)
+#  pixlen: length between digitised points in pixels
+# Additionally, if a column named height is present, these columns are added:
+#  xg, yg: extrapolated pixel x and y co-ordinates of pole ground-contact points)
+#  hb, ht: real heights above ground of pole b(ottoms) and t(ops)
+#  length: real lengths between points (the difference between ht and hb)
+
+#Point groups are discarded with a warning if:
+# base height is greater than or equal to top height (hb>=ht)
+# the points have different distances at top and base
+# the group was digitised only once or more than twice
+
+pairup <- function(dat, pairtag){
+
+  pair <- function(dat){
     dat <- dat[order(dat$pair_id, dat$y), ]
     j <- 2*(1:(nrow(dat)/2))
     xy <- cbind(dat[j, c("x","y")], dat[j-1, c("x","y")])
     names(xy) <- c("xb","yb","xt","yt")
-    if("height" %in% names(dat))
-      xy <- cbind(xy, hb=dat$height[j], ht=dat$height[j-1], length=dat$height[j-1]-dat$height[j])
+#    xy$pixlen <- with(xy, sqrt((xt-xb)^2 + (yt-yb)^2))
+    if("height" %in% names(dat)){
+      xy <- cbind(hb=dat$height[j], ht=dat$height[j-1], length=dat$height[j-1]-dat$height[j], xy)
+      relh <- with(xy, hb/length)
+      xy <- cbind(xy, xg=with(xy, xb-(xt-xb)*relh), yg=with(xy, yb-(yt-yb)*relh))
+    }
     dat <- cbind(dat[j,], xy)
     dat[, !names(dat) %in%  c("x","y","height")]
   }
 
   colnames <- names(dat)
-  gotxy <- all(c("x","y") %in% colnames)
-  gotpid <- any(c("pair_id", "filename") %in% colnames)
-  if(!gotxy | !gotpid) 
-    stop("Input dat must have at least columns x, y, and EITHER pair_id OR filename")
+  if(!all(c("x","y",pairtag) %in% colnames)) 
+    stop(paste0("Input dat must have at least columns x, y, and those defined in pairtag argument (", 
+                paste(pairtag, collapse=", "), ")"))
+  
   if("height" %in% colnames){
     dat$height <- suppressWarnings(as.numeric(as.character(dat$height)))
     dat <- subset(dat, !is.na(height))
-    dat <- dat[order(dat$height), ]
   }
   if("distance" %in% names(dat)){
     dat$distance <- suppressWarnings(as.numeric(as.character(dat$distance)))
@@ -780,159 +727,128 @@ make.pairdat <- function(dat){
     dat$length <- suppressWarnings(as.numeric(as.character(dat$length)))
     dat <- subset(dat, !is.na(length))
   }
-  if(!"pair_id" %in% names(dat)) dat$pair_id <- with(dat, paste(group_id, filename, sep="_"))
-  dat <- dat[order(dat$pair_id), ]
+  dat$pair_id <- tidyr::unite(dat[, pairtag], "pr", sep="/")$pr
   
-  duff1 <- duff2 <- duff3 <- FALSE
+  duff1 <- duff2 <- duff3 <- NULL
   tab <- table(dat$pair_id)
-  if("height" %in% names(dat)){
-    minh <- tapply(dat$height, dat$pair_id, min)
-    duff1 <- (tab==1 & minh>0)
+  if("height" %in% names(dat)){ 
+    miny <- with(dat, tapply(y, pair_id, min))
+    maxy <- with(dat, tapply(y, pair_id, max))
+    i <- match(dat$pair_id, names(miny))
+    duff1 <- tab>1 & with(dat, height[y==miny[i]] <= height[y==maxy[i]]) #base height >= top height
+    duff2 <- tab==1 #Only one point digitised
   }
-  if("distance" %in% names(dat))
-    duff2 <- with(dat, tapply(distance, pair_id, min) != tapply(distance, pair_id, max))
-  
-  if(any(duff1 | duff2))
-    dat <- droplevels(subset(dat, !dat$pair_id %in% names(which(duff1 | duff2))))
-  tab <- table(dat$pair_id)
+  if("distance" %in% names(dat)) #Paired points at different distances
+    duff3 <- with(dat, tapply(distance, dat$pair_id, min) != tapply(distance, dat$pair_id, max))
   i <- which(sequence(tab)==1)
-  i <- c(i, tail(i,-1)-1, nrow(dat))
-  dat <- dat[sort(i), ] #remove excess points (>2 per pole)
+  iduff4 <- !1:nrow(dat) %in% c(i, tail(i,-1)-1, nrow(dat)) #surplus points (>2)
+  duff4 <- tapply(iduff4, dat$pair_id, any)
 
-  tab <- table(dat$pair_id)
-  i <- dat$pair_id %in% names(tab)[tab==1]
-  if(nrow(dat)>0) res <- pairup(dat[!i, ]) else res <- NULL
-  if("height" %in% names(dat)){
-    duff3 <- res$hb>=res$ht
-    names(duff3) <- res$pair_id
-    if(any(duff3, na.rm=TRUE)) res <- droplevels(res[!duff3, ])
-  }
-  
-  solos <- dat[i, ]
-  if(nrow(solos)>0 & "distance" %in% names (dat)){
-    pxratio <- with(res,  sqrt((xb-xt)^2+(yb-yt)^2) / (ht-hb))
-    invd <- 1/res$distance
-    relx2 <- (res$xb / res$ImageWidth - 0.5)^2
-    mod <- lm(pxratio~invd+relx2-1)
-    nd <- data.frame(invd=1/solos$distance, relx2=(solos$x/solos$ImageWidth-0.5)^2)
-    solos2 <- solos
-    solos2$height <- 1
-    solos2$y <- solos$y-predict(mod, newdata=nd)
-    res <- rbind(res, pairup(rbind(solos,solos2)))
-  }
-  if(!is.null(res)) res <- res[order(res$pair_id), ]
-  
-  if(any(duff1 | duff2) | any(duff3)){
-    message("Warning:\n Some poles were discarded because they...")
+  if(any(duff1 | duff2 | duff3 | duff4)){
+    message("Warning:\n Some rows were discarded because...")
     if(any(duff1)){
-      message("...were digitised only once at height > 0:")
+      message("...the pole base height was greater than or equal to top height:")
       cat(names(which(duff1)), sep="\n")
     }
     if(any(duff2)){
-      message("...had different distances at top and base:")
+      message("...the pole was digitised only once:")
       cat(names(which(duff2)), sep="\n")
     }
     if(any(duff3)){
-      message("...had base height >= top height:")
+      message("...the pole had different distances at top and base:")
       cat(names(which(duff3)), sep="\n")
     }
+    if(any(duff4)){
+      message("...the pole had more than two points digitised:")
+      cat(names(which(duff4)), sep="\n")
+    }
   }
-  res
+  pair(dat[!(dat$pair_id %in% names(which(duff1 | duff2 | duff3)) | iduff4), ])
 }
 
 #CALIBRATION FUNCTIONS#############################################
-
-#make.camtable#
-#MAYBE CUT THIS ONE
-
-#Make a lookup table matching sites to camera from a digitisation dataframe
-
-#INPUT
-# dat: a dataframe created using read.digidat containing camera information from image metadata
-# camcolumns: a vector of column headings used to create camera categories
-
-#OUTPUT
-#A dataframe with columns deploy_id and cam_id, indicating which camera category 
-#was deployed at each site
-make.camtable <- function(dat, camcolumns=c("Make", "Model", "Megapixels")){
-  if(!all(camcolumns %in% names(dat))) stop("Supplied columns do not all exist in dat column headings")
-  cat <- caldat[, camcolumns]
-  if(class(cat)=="data.frame") cat <- apply(cat, 1, paste, collapse="_")
-  tab <- table(caldat$group_id, cat)
-  i <- apply(tab, 1, function(x) which(x>0))
-  if(class(i)!="integer") stop("Some deployments have more than one camera category")
-  data.frame(deploy_id=unique(caldat$group_id), cam_id=colnames(tab)[i])
-}
-
 
 #cal.cam#
 
 #Creates a camera calibration model
 
 #INPUT
-# poledat: data frame of pole digitisation data with (at least) columns:
-# distance: pole distances from camera
-# length: pole lengths
-# xt,yt,xb,yb: x,y pixel positions of pole tops (t) and bases (b) in image
-# xdim, ydim: x and y dimensions of each image
-# group_id: camera ID code for each record (optional - see below)
+# poledat: a dataframe of pole digitisation data (see details)
+# camtag: character string naming a column within poledat tagging camera ID
 
 #OUTPUT
-# A list object of class camcal (ie camera calibration), describing relationship between
-# pixel size and radial distance, and x-pixel position and angular distance, with elements:
-#  model: quadratic model of FSratio against relative x position (ie focal_length:sensor_size)
-#  APratio: ratio of angle to *relative* x pixel position
-# If group_id is provided, one model is fitted for each unique camera ID.
-# If data are for a single camera, group_id can be omitted
+# A list of class camcal (ie camera calibration), describing the relationship 
+# between pixel size and radial distance, and x-pixel position and angular 
+# distance, with elements:
+#  model: quadratic model of FSratio (focal_length:sensor size) against relative x pixel position 
+#  APratio: ratio of angle to relative x pixel position
 
-cal.cam <- function(poledat){
+#DETAILS
+#Poledat input is most easily generated by read.digidat followed by pairup. It 
+#must contain (at least) columns:
+# distance: pole distances from camera
+# length: length of pole between digitised points
+#  xt,yt,xb,yb: x,y pixel positions of digitised pole t(ops) and b(ases) in image
+#  xdim, ydim: x and y pixel dimensions of each image
+#
+#If camtag is provided, one model is fitted for each unique camera ID, but 
+#camtag can be NULL if all data are for a single camera.
+
+cal.cam <- function(poledat, camtag=NULL){
   #Internal function fits a single camera calibration model
   cal <- function(dat){
     dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
-    if(length(unlist(dim))>2) stop("There is more than one unique value per camera for xdim and/or ydim in poledat")
+    if(length(unlist(dim))>2) 
+      stop("There is more than one unique value per camera for xdim and/or ydim in poledat")
     names(dim) <- c("x","y")
     dat$pixlen <- with(dat, sqrt((xb-xt)^2 + (yb-yt)^2))
     dat$relx <- apply(dat[c("xb","xt")], 1, mean)/dim$x-0.5
     FSratio <- with(dat, distance*pixlen/(length*dim$y))
     APratio <- mean(with(dat, (acos(1-length^2/(2*(distance^2+(length/2)^2)))*dim$x/pixlen)))
     mod <- lm(FSratio~I(relx^2), data=dat)
-    res <- list(model=mod, APratio=APratio, dim=dim, data=dat)
-    class(res) <- "camcal"
-    res
+    camcal(list(model=mod, APratio=APratio, dim=dim, data=dat, 
+                id=if(is.null(camtag)) NULL else unique(dat[,camtag])))
   }
   
   if(class(poledat) != "data.frame") 
     stop("poledat must be a dataframes")
+  if(!is.null(camtag)){
+    if(!camtag %in% names(poledat))
+      stop(paste0("Can't find camtag column (", camtag, ") in poledat"))
+  }
   required <- c("xb", "yb", "xt", "yt", "xdim", "ydim", "distance", "length")
   if(!all(required %in% names(poledat))) 
     stop(paste("poledat must contain all of these columns:", paste(required, collapse=" ")))
   
-  if("group_id" %in% names(poledat)){
-    cams <- unique(poledat$group_id)
-    out <- lapply(cams, function(cam) cal(subset(poledat, group_id==cam)))
-    names(out) <- cams
-  } else
-    out <- list(cam=cal(poledat))
-  class(out) <- "calibration"
-  out
+  if(is.null(camtag))
+    out <- list(cal(poledat)) else{
+      cams <- unique(poledat[, camtag])
+      out <- lapply(cams, function(cam) cal(poledat[poledat[,camtag]==cam, ]))
+      names(out) <- cams
+    } 
+  calibs(out)
 }
 
 
 #plot.camcal#
 
-#Show diagnostic plots for camera calibration model
+#INPUT
+# mod: a camera calibration object of class camcal, created using cal.cam
+
+#Generates two diagnostic plots for a camera calibration model:
+#1. Length per image pixel as a function of distance from camera and x pixel
+#   position within the image
+#2. A diagram of digitised pole sections as they appear in images.
 
 plot.camcal <- function(mod){
-  cam <- unique(mod$data$group_id)
-
   dat <- mod$data
   cols <- grey.colors(11, start=0, end=0.8)
   
   #PLOT POLE:PIXEL RATIO V DISTANCE RELATIONSHIP
   x <- abs(dat$relx)
   i <- round(1 + (x-min(x))*10/diff(range(x)))
-  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=cam,
-                 ylab="m/pixel", xlab="distance", 
+  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=mod$id,
+                 ylab="length/pixel", xlab="distance", 
                  sub="Shading from image centre (dark) to edge", cex.sub=0.7))
   FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
   dr <- range(dat$distance)
@@ -942,7 +858,7 @@ plot.camcal <- function(mod){
   #PLOT POLE IMAGE
   d <- dat$distance
   i <- round(1 + (d-min(d))*10/diff(range(d)))
-  plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=cam,
+  plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=mod$id,
        xlab="x pixel", ylab="y pixel", 
        sub="Shading from near camera (dark) to far", cex.sub=0.7)
   for(p in 1:nrow(dat))
@@ -950,95 +866,128 @@ plot.camcal <- function(mod){
   lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
 }
 
+
 #calc.distance
 
-#Calculate distances from camera of an object of known size.
+#Calculate distances from camera to an object of known length.
 
 #INPUT
-#dat: A dataframe with (at least) columns named:
-# xb,yb,xt,yt: paired x and y pixel positions of object extremities, defined by (xb,yb) and (xt,yt)
-# length: real-world distances between the pixels in each pair
-#cmod: A camera calibration object created by cal.cam; if cmod holds a single calibration,
-# this is use without reference to its namel; if it holds multiple calibrations, dat must have
-# column cam_id, used to select the appropriate calibration object by name matching.
+#dat: A dataframe of paired point digitisation data created by pairup
+#cmods: A list of camera calibration models created by cal.cam, named if more than one 
+#idtag: a string naming the column in dat used for matching in lookup
+#lookup: a table used to match camera models to categories (typically deployments) in dat
 
 #OUTPUT
-#A dataframe identical to dat plus additional column distance, giving distances
-#from camera in the same  units as length in dat input.
-calc.distance <- function(dat, cmod){
+#A dataframe identical to dat plus additional columns:
+# distance: distance from camera to object in the same units as length in dat
+# relx: relative x-pixel position in image (from -0.5 to 0.5 left to right edges)
+# pixlen: the pixel length between points in image
+
+#DETAILS
+#The input dat must have (at least) columns named:
+# xb,yb,xt,yt: paired x and y pixel positions of object extremities, defined by (xb,yb) and (xt,yt)
+# length: real distances between the pixels in each pair
+
+#If cmods holds a single calibration model, this is applied to all data in dat.
+#If cmods holds multiple calibration models, both idtag and lookup must be 
+#supplied, and both dat and lookup must contain this column. This enables the
+#appropriate camera calibration model to be selected for each observation in dat.
+
+calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
   
   calc <- function(dat, cmod){
-    pixlen <- sqrt((dat$xt-dat$xb)^2 + (dat$yt-dat$yb)^2)
-    relx <- (dat$xb+dat$xt)/(2 * cmod$dim$x) - 0.5
-    FSratio <- predict(cmod$model, newdata = data.frame(relx=relx))
-    dat$distance <- FSratio * dat$length * cmod$dim$y/pixlen
+    if(!"relx" %in% names(dat)) dat$relx <- (dat$xb+dat$xt)/(2 * cmod$dim$x) - 0.5
+    FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
+    dat$pixlen <- with(dat, sqrt((xt-xb)^2 + (yt-yb)^2))
+    dat$distance <- with(dat, FSratio*length*cmod$dim$y/pixlen)
     dat
   }
-  
-  if(!all(c("xb","yb","xt","yt","length") %in% names(dat))) stop("dat must contain (at least) columns xb, yb, xt, yt and length")
-  
-  if(length(cmod)==1) return(calc(dat, cmod[[1]])) else{
-    if(!"cam_id" %in% names(dat)) stop("cam_id column must be present in dat if cmod holds multiple calibrations")
-    cams <- unique(dat$cam_id)
-    if(!all(cams %in% names(cmod))) stop("Not all dat$cam_id values could be found in names(cmod)")
-    res <- lapply(cams, function(cam) calc(subset(dat, cam_id==cam), cmod[[cam]]))
+
+  if(!all(c("xb","yb","xt","yt","length") %in% names(dat))) 
+    stop("dat must contain (at least) columns xb, yb, xt, yt and length")
+
+  dat$rowid <- 1:nrow(dat)
+  if(length(cmods)==1) 
+    return(calc(dat, cmods[[1]])) else{
+      if(is.null(idtag))
+        stop("idtag cannot be missing if there is more than one model in cmods") else
+          if(!idtag %in% names(dat))
+            stop("Can't find idtag column in dat")
+      if(is.null(lookup)){
+        if(!all(dat[,idtag] %in% names(cmods)))
+          stop("If lookup table is missing, idtag column must contain camera IDs matched with names(cmods)")
+        camid <- dat[,idtag] 
+      } else{
+        if(!idtag %in% names(lookup))
+          stop("idtag column must be present in lookup as well as dat")
+        if(!all(dat[,idtag] %in% lookup[,idtag]))
+          stop("Can't find all dat$idtag values in lookup$idtag")
+        if(!all(lookup$camera %in% names(cmods)))
+          stop("Can't find all lookup$camera values in names(cmods)")
+        camid <- lookup$camera[match(dat[,idtag], lookup[,idtag])]
+      }
+
+    cams <- unique(camid)
+    res <- lapply(cams, function(cam) calc(subset(dat, camid==cam), cmods[[cam]]))
     res <- dplyr::bind_rows(res)
-    return(dplyr::arrange(res, sequence_id))
+    res[order(res$rowid), -which(names(res)=="rowid")]
   }
 }
 
+#cal.dep#
 
-#cal.site#
-
-#Create a site calibration model from data on pole distances from camera and positions within image.
-#Pole distances can EITHER be predicted using provided camera calibration model(s), OR be provided as
-#a field named distance in input data.
+#Create a deployment calibration model
 
 #INPUT
-# dat: data frame of pole digitisation data with (at least) columns:
+# dat: data frame of paired pole digitisation data (see details)
+# cmods: A list of camera calibration models created by cal.cam, named if more than one 
+# idtag: a string naming the column in dat used for matching in lookup
+# lookup: a table used to match camera models to deployments in dat
+# minpoles: threshold minimum number of poles needed to fit a model
+# flex: whether to include additional flexibility in the model (can be difficult to fit)
+
+#OUTPUT
+#A list object of class depcal (ie deployment calibration), describing 
+#relationship between pixel position and distance, with elements:
+# cam.model: the camera calibration model used to predict distances (if any)
+# model: non-linear least squares (nls) fit of distance as a function of pixel position (see details)
+# data: the data input to the model
+# dim: the x,y pixel dimensions of the images used for calibration
+# id: the name of the deployment
+
+#DETAILS
+#Input dataframe dat is ideally created using pairup, and must contain at least
+#columns:
 #  xb, yb, xt, yt: x and y co-ordinates of pole b(ottom) and t(op) positions digitised
 #  hb, ht: actual heights above ground of the digitised pole positions
 #  xdim, ydim: x and y dimensions of each image
-#  distance: actual pole distances from camera (required if cmod not provided)
-# cmod: a (list of) camera model(s); if multiple models, element names are used for matching
-# lookup: a dataframe with (at least) columns cam_id and deploy_id, mapping cameras to deployments
-# flex: whether to include additional flexibility in the model (can be difficult to fit)
-# minpoles: threshold minimum number of poles needed to fit a model; returns NULL sitecal if less
+#If cmods (camera calibration models) are provided Pole distances will be 
+#predicted using these models. If not, dat must also contain distance data in a 
+#column named distance.
 
-#OUTPUT
-# A list object of class sitecal (ie site calibration), describing relationship between pixel position and distance, 
-# with elements:
-#  cam.model: the camera calibration model used to predict distances (if any)
-#  site.model: non-linear least squares fit of distance (d) to *relative* x and y pixel positions:
-#              d ~ b1 / (y-(b2+b3*x))
-#  data: the data input to the model
-#  dim: the x,y pixel dimensions of the images used for calibration
-cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE, minpoles=3){
+#Distance (d) as a function of x and y pixel positions is modelled using non-linear
+#least squares (nls function) with equation either (for flex=FALSE):
+#   d ~ b1 / (y-(b2+b3*x))
+#or (for flex=TRUE):
+#   d ~ b1 / (y^b4-(b2+b3*x))
 
-  cal <- function(dat, cmod=NULL){
+#If the number of poles available for a deployment is less than or equal to 
+#minpoles, no model fitting is attempted and the output is NULL, with a warning.
+
+cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, 
+                     minpoles=3, flex=FALSE){
+
+  cal <- function(dat, id=NULL, cmod=NULL){
     if(nrow(dat)<minpoles){
-      res <- list(cam.model=NULL, site.model=NULL)
-      class(res) <- "sitecal"
+      res <- list(cam.model=cmod, model=NULL, data=NULL, dim=NULL, id=id)
     } else{
       dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
-      if(length(unlist(dim))>2) stop("There is more than one unique value per site for xdim and/or ydim in dat")
+      if(length(unlist(dim))>2) 
+        stop("There is more than one unique value per deployment for xdim and/or ydim in dat")
       names(dim) <- c("x","y")
       
-      xdiff <- (dat$xt-dat$xb)
-      ydiff <- (dat$yt-dat$yb)
-      dat$pixlen <- sqrt(xdiff^2 + ydiff^2)
-      dat$xg <- with(dat, xb - xdiff*hb/(ht-hb))
-      dat$yg <- with(dat, yb - ydiff*hb/(ht-hb))
       dat$rely <- dat$yg/dim$y
       dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
-      if(!is.null(cmod)){
-        FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
-        dat$distance <- FSratio * (dat$ht-dat$hb) * dim$y/dat$pixlen
-      } else{
-        poledat <- data.frame(dat[, c("distance", "xt","yt","xb","yb","xdim","ydim")])
-        poledat$length <- dat$ht-dat$hb
-        cmod <- cal.cam(poledat)
-      }
       repeat{
         b1.start <- runif(1,0,max(dat$distance))
         if(flex)
@@ -1054,45 +1003,72 @@ cal.site <- function(dat, cmod=NULL, lookup=NULL, flex=FALSE, minpoles=3){
                        trace=F ))
           if(class(mod)=="nls") break
       }
-      res <- list(cam.model=cmod, site.model=list(model=mod, data=dat, dim=dim))
-      class(res) <- "sitecal"
+      res <- list(cam.model=cmod, model=mod, data=dat, dim=dim, id=id)
     }
-    res
+    depcal(res)
   }
-  
-  sites <- unique(dat$group_id)
-  if(is.null(cmod)){
-    out <- lapply(sites, function(s) cal(subset(dat, group_id==s)))
-    } else{
-      if(is.null(lookup)) stop("Site-camera lookup table must be provided if camera models are specified")
-      if(!all(sites %in% lookup$deploy_id)) stop("Not all dat$group_id values have a matching value in lookup$deploy_id")
-      if(any(!lookup$cam_id[match(sites, lookup$deploy_id)] %in% names(cmod))) stop("Can't find all the necessary camera models in cmod - check lookup table and names(cmod)")
-      out <- lapply(sites, function(s)
-        cal(subset(dat, group_id==s), cmod[[lookup$cam_id[match(s, lookup$deploy_id)]]])
-      )
-    }
-  names(out) <- sites
-  nofits <- unlist(lapply(out, function(m) is.null(m$site.model)))
-  if(any(nofits)){
-    cat(sites[nofits], sep="\n")
-    message("Warning: The above deployment(s) had too few poles to fit a model")
-  }
-  class(out) <- "calibration"
-  out
+
+  if(!is.null(deptag))
+    if(!deptag %in% names(dat))
+      stop(paste0("Can't find deptag column (", deptag, ")in dat"))
+  if(length(cmods)==0){
+    if(!"distance" %in% names(dat))
+      stop("A distance column must be present in dat if cmods is NULL")
+    } else
+      if(length(cmods)==1){
+        dat <- calc.distance(dat, cmods)
+        } else{
+          if(is.null(deptag) | is.null(lookup))
+            stop("Both deptag and lookup must be defined if there are multiple models in cmods") else{
+              if(!deptag %in% names(lookup))
+                stop("deptag column must be present in lookup as well as dat")
+              dat <- calc.distance(dat, cmods, deptag, lookup)
+            }
+        }
+
+        cmod <- if(is.null(cmods)) cal.cam(dat) else
+          if(length(cmods)==1) cmods[[1]]
+        if(is.null(deptag))
+          res <- list(cal(dat, NULL, cmod)) else{
+            deps <- unique(dat[,deptag])
+            res <- lapply(deps, function(d){
+              cam <- lookup$camera[lookup[,deptag]==d]
+              cmod <- cmods[[cam]]
+              cal(dat[dat[,deptag]==d, ], d, cmod)
+            })
+            names(res) <- deps
+          }
+        
+        nofits <- unlist(lapply(res, function(m) is.null(m$model)))
+        if(any(nofits)){
+          message("Warning: One or more deployments had too few poles to fit a model:")
+          cat(deps[nofits], sep="\n")
+        }
+        calibs(res)
 }
 
-#plot.sitecal#
 
-#Show diagnostic plots for site calibration model
+#plot.depcal#
 
-plot.sitecal <- function(mod){
-  site <- unique(mod$site.model$data$group_id)
+#Show diagnostic plots for deployment calibration model
 
-  if(is.null(mod$site.model)){
-    message(paste("Model without a fit not plotted:", site, "\n"))
+#INPUT
+# mod: a deployment calibration object of class depcal, created using dep.cam
+
+#Generates two diagnostic plots for a deployment calibration model:
+#1. Distance from camera as a function of pixel position within image with model
+#   trend lines
+#2. A diagram of digitised poles and the point's at which they were digitised
+#   as they appear in images.
+
+plot.depcal <- function(mod){
+  dep <- mod$id
+    
+  if(is.null(mod$model)){
+    message(paste("Model without a fit not plotted:", dep, "\n"))
   } else{
-    dim <- as.list(apply(mod$site.model$data[,c("xdim","ydim")],2,unique))
-    dat <- mod$site.model$data
+    dim <- as.list(apply(mod$data[,c("xdim","ydim")],2,unique))
+    dat <- mod$data
     colrange <- grey.colors(11, start=0, end=0.8)
     
     #PLOT DISTANCE V Y-PIXEL RELATIONSHIP
@@ -1100,13 +1076,13 @@ plot.sitecal <- function(mod){
     mxx <- max(max(dat$rely),1.5)
     with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,mxx), ylim=c(0, 1.5*max(distance)),
                    xlab="Relative y pixel position", ylab="Distance from camera",
-                   main=site, 
+                   main=dep, 
                    sub="Shading from image left (dark) to right edge", cex.sub=0.7))
-    if(class(mod$site.model$model)=="nls"){
+    if(class(mod$model)=="nls"){
       sq <- seq(0, mxx, len=100)
-      lines(sq, predict.r(mod$site.model$model, -0.5, sq), col=colrange[1])
-      lines(sq, predict.r(mod$site.model$model, 0, sq), col=colrange[6])
-      lines(sq, predict.r(mod$site.model$model, 0.5, sq), col=colrange[11])
+      lines(sq, predict.r(mod$model, -0.5, sq), col=colrange[1])
+      lines(sq, predict.r(mod$model, 0, sq), col=colrange[6])
+      lines(sq, predict.r(mod$model, 0.5, sq), col=colrange[11])
     }
     
     #PLOT POLE IMAGE
@@ -1115,11 +1091,13 @@ plot.sitecal <- function(mod){
     yl <- with(dat, yt + relht*(yt-yb))
     plot(c(0, dim$xdim), -c(0, dim$ydim), 
          asp=1, xlab="x pixel", ylab="y pixel", type="n", 
-         main=site, sub="Shading from near camera (dark) to far", cex.sub=0.7)
+         main=dep, cex.sub=0.7)
     lines(c(0,rep(c(dim$xdim,0),each=2)), c(rep(c(0,-dim$ydim),each=2),0), lty=2)
-    cols <- with(dat, colrange[1+round(10*((distance-min(distance))/diff(range(distance))))])
-    for(i in 1:nrow(mod$site.model$data)){
-      with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), col=cols[i], lwd=2))
+    drange <- with(dat, (distance-min(distance))/diff(range(distance)))
+    lwds <- 5-drange*3
+    for(i in 1:nrow(dat)){
+      with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), lwd=lwds[i], 
+                      col=rgb(0, 0, 0, alpha=0.4)))
       with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
     }
   }
@@ -1127,9 +1105,13 @@ plot.sitecal <- function(mod){
 
 #plot.calibration#
 
-#Show diagnostic plots for site calibration model
+#Show multiple diagnostic plots for a list of either camera or deployment 
+#calibration calibration models
 
-plot.calibration <- function(mods){
+#INPUT
+# mods: a list of either camera or deployment calibration objects
+
+plot.calibs <- function(mods){
   lapply(mods, plot)
 }
 
@@ -1148,7 +1130,7 @@ plot.calibration <- function(mods){
 # xb, xt, yb and yt (if type is pole, giving bottom and top digitisation positions)
 #
 #For animal data, typically applied to the $animal compenent of read.digidat() output.
-#For pole data, typically applied to the $site.model$data component of cal.site() output.
+#For pole data, typically applied to the $data component of cal.site() output.
 
 show.image <- function(dat, dir, type=c("pole", "animal")){
   type <- match.arg(type)
@@ -1176,7 +1158,7 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
 #Predict radial distance from camera given pixel positions
 
 #INPUT
-# mod: a sitecal objext (site calibration model, produced using cal.site(...))
+# mod: a depcal object (site calibration model, produced using cal.site(...))
 # relx: x pixel position relative to the centre line
 # rely: y pixel position relative to the top edge
 
@@ -1196,43 +1178,51 @@ predict.r <- function(mod, relx, rely){
 #Predicts position relative to camera given image pixel positions and site calibration models 
 
 #INPUT
-# dat: a dataframe of digitisation data containing (at least) columns:
-#  x,y: x and y pixel positions for each digitised point
-#  xdim,ydim: x and y pixel dimensions of each image; must be consistent for each group_id
-#  group_id: site identifier
-# mod: a named list of site calibration models; names must be matched by group_id column in dat
+# dat: a dataframe of animal position digitisation data (see details)
+# mods: a named list of deployment calibration models
+# deptag: a string naming the column within dat against which names of the 
+#         elements can be matched to apply the right deployment calibration
+#         models.
 
 #OUTPUT
-# A dataframe of original data with radial and angular distances from camera appended.
+#A dataframe of original data with additional columns:
+# radius: radial distance from camera
+# angle: angular distance from camera
+# frame_count: an indicator of the frame order within each sequence
 
-predict.pos <- function(dat, mod){
+#DETAILS
+#Input dat must contain (at least) columns:
+# x,y: x and y pixel positions for each digitised point
+# xdim,ydim: x and y pixel dimensions of each image; must be consistent for each deployment
 
-  required <- c("x","y","xdim","ydim","group_id")
+predict.pos <- function(dat, mods, deptag="deployment"){
+
+  required <- c("x","y","xdim","ydim", deptag)
   if(!all(required %in% names(dat))) 
     stop(paste("dat must contain all of these columns:", paste(required, collapse=" ")))
 
-  sites <- unique(dat$group_id)
-  gotmodel <- sites %in% names(smods)
-  nullmodel <- names(smods)[unlist(lapply(smods, function(m) is.null(m$site.model)))]
-  gotmodel[match(nullmodel, sites)] <- FALSE
+  deps <- unique(dat[, deptag])
+  gotmodel <- deps %in% names(smods)
+  nullmodel <- names(smods)[unlist(lapply(smods, function(m) is.null(m$model)))]
+  gotmodel[match(nullmodel, deps)] <- FALSE
   if(!all(gotmodel)){
-    cat(sites[!gotmodel], sep="\n")
-    message("Warning: The above sites had no matching site calibration model and were stripped out")
-    dat <- subset(dat, group_id %in% sites[gotmodel])
-    sites <- sites[gotmodel]
+    message("Warning: Some deployments had no matching calibration model and were stripped out:")
+    cat(deps[!gotmodel], sep="\n")
+    dat <- subset(dat, dat[,deptag] %in% deps[gotmodel])
+    deps <- deps[gotmodel]
   }
 
-  multidim <- lapply(with(dat, tapply(xdim, group_id, unique)), length)>1 |
-              lapply(with(dat, tapply(ydim, group_id, unique)), length)>1
+  multidim <- lapply(tapply(dat$xdim, dat[,deptag], unique), length)>1 |
+              lapply(tapply(dat$ydim, dat[,deptag], unique), length)>1
   if(any(multidim)){
-    message("Warning:\n There is more than one unique value per site for xdim and/or ydim in site(s):")
+    message("Warning:\n There is more than one unique value per deployment for xdim and/or ydim in deployment(s):")
     cat(names(which(multidim)), sep="\n")
   }
 
-  res <- lapply(sites, function(s){
-    dt <- subset(dat, group_id==s)
-    cm <- mod[[s]]$cam.model
-    sm <- mod[[s]]$site.model$model
+  res <- lapply(deps, function(d){
+    dt <- subset(dat, dat[,deptag]==d)
+    cm <- mods[[d]]$cam.model
+    sm <- mods[[d]]$model
     data.frame(dt, radius=predict.r(sm, dt$x/dt$xdim-0.5, dt$y/dt$ydim),
                angle=cm$APratio * (dt$x/dt$xdim-0.5))
   })
@@ -1248,7 +1238,7 @@ predict.pos <- function(dat, mod){
 #Creates a dataframe of image-to-image changes for each row in dat
 
 #INPUT
-# A dataframe dat produced by predict.pos with columns:
+# A dataframe dat produced by predict.pos with (at least) columns:
 #   sequence_id: sequence identifier
 #   x,y: x and y pixel positions of dixitised points
 #   radius, angle: predicted radial and angular distances from camera
@@ -1283,24 +1273,28 @@ seq.data <- function(dat){
 #  imgcount: the number of images in each sequence
 
 #OUTPUT
-#A list of dataframes:
-# $trigdat, trigger data, containing original data for single frame sequences plus:
-#   radius, angle: radius and angle of trigger position
-# $movdat, movement data, containing original data for multi-frame sequences plus:
-#   radius, angle: radius and angle of position in first frame of each image
-#   pixdiff: total pixel distance traveled across image
-#   dist: total distance travelled over ground (units depend on site calibration units)
-#   time: time taken (diff[range{frame.number}]*interval)
-#   speed: travel speed (dist/time)
-#   frames: number of frames digitised
+#A dataframes containing original data for only sequences with two or more images,
+#plus additional columns:
+# radius, angle: radius and angle of position in first frame of each image
+# pixdiff: total pixel distance traveled across image
+# dist: total distance travelled over ground (units depend on site calibration units)
+# timediff: apparent time taken (timestamp differences between first and last frames) 
+# time: inferred time taken (see details)
+# speed: travel speed (dist/time)
+# frames: number of images in the sequence
 
-seq.summary <- function(dat){
+#DETAILS
+#For sequences with more than 10 images, time is taken directly from timediff.
+#For shorter sequences, time is calculated as the number of image transitions
+#(frames-1) times the average transition time for those shorter sequences.
+
+seq.summary <- function(dat, datetimetag="datetime"){
   calc.mov <- function(dat){
     n <- as.numeric(table(dat$sequence_id))
     dat <- seq.data(dat)
     pixdiff <- with(dat, tapply(pixdiff, sequence_id, sum, na.rm=T) )
     mvdist <- with(dat, tapply(displacement, sequence_id, sum, na.rm=T) )
-    tm <- strptime(dat$CreateDate, format="%Y:%m:%d %H:%M:%S", tz="UTC")
+    tm <- strptime(dat[,datetimetag], format="%Y:%m:%d %H:%M:%S", tz="UTC")
     mvtime <- tapply(tm, dat$sequence_id, function(x) as.numeric(diff(range(x)), units="secs"))
     i <- n<11
     mntime <- sum(mvtime[i]) / (sum(n[i]) - sum(i))

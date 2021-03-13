@@ -1,0 +1,19 @@
+station
+	S01
+	S02
+	S03
+deployment
+	S01
+	S02
+	S03a
+	S03b
+species
+	calibration
+	fox
+	hedgehog
+count
+	1
+	2
+contact
+	1
+	2
