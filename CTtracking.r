@@ -74,7 +74,7 @@ install.exiftool <- function(dir=NULL){
 #Runs command line executable exiftool, which must be present locally (see 
 #install.exiftool).
 
-peep.exif <- function(path, file.index=1){
+peep.exif <- function(path, file.index=1, toolpath=NULL){
   if(!file.exists(path)) stop("path not found")
   if(dir.exists(path)){
     allfls <- list.files(path, full.names=TRUE, recursive=TRUE)
@@ -85,7 +85,7 @@ peep.exif <- function(path, file.index=1){
     if(file.index<1 | file.index>n) stop(paste0("file.index must be between 1 and ", length(allfls), " (the number of files in ", path, ")"))
     path <- allfls[file.index]
   }
-  res <- read.exif(path, "")
+  res <- read.exif(path, "", toolpath=toolpath)
   vals <- as.character(res[1,])
   data.frame(Field=names(res), Value=vals, stringsAsFactors=FALSE)
 }
@@ -1096,11 +1096,9 @@ plot.depcal <- function(mod){
          asp=1, xlab="x pixel", ylab="y pixel", type="n", 
          main=dep, cex.sub=0.7)
     lines(c(0,rep(c(dim$ImageWidth,0),each=2)), c(rep(c(0,-dim$ImageHeight),each=2),0), lty=2)
-    drange <- with(dat, (distance-min(distance))/diff(range(distance)))
-    lwds <- 5-drange*3
+    cols <- colrange[with(dat, 1+round(10*((distance-min(distance))/diff(range(distance)))))]
     for(i in 1:nrow(dat)){
-      with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), lwd=lwds[i], 
-                      col=rgb(0, 0, 0, alpha=0.4)))
+      with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), col=cols))
       with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
     }
   }
@@ -1205,8 +1203,8 @@ predict.pos <- function(dat, mods, deptag="deployment"){
     stop(paste("dat must contain all of these columns:", paste(required, collapse=" ")))
 
   deps <- unique(dat[, deptag])
-  gotmodel <- deps %in% names(smods)
-  nullmodel <- names(smods)[unlist(lapply(smods, function(m) is.null(m$model)))]
+  gotmodel <- deps %in% names(mods)
+  nullmodel <- names(mods)[unlist(lapply(mods, function(m) is.null(m$model)))]
   gotmodel[match(nullmodel, deps)] <- FALSE
   if(!all(gotmodel)){
     message("Warning: Some deployments had no matching calibration model and were stripped out:")

@@ -1,7 +1,11 @@
 #Using V0.2 (Laura Vargas Zarco version of Animaltracker)
 
+devtools::source_url("https://raw.githubusercontent.com/MarcusRowcliffe/CTtracking/master/CTtracking.r")
 source("CTtracking.r")
+
+install.exiftool()
 folder <- "./Survey_yyy"
+
 
 #Camera calibration models
 campth <- file.path(folder, "Cameras")
@@ -24,23 +28,22 @@ deppth <- file.path(folder, "Deployments")
 dep.exdat <- read.csv(file.path(folder, "exifdata.csv"), stringsAsFactors = FALSE)
 
 #Deployment calibration models
-deptab <- read.csv(file.path(folder, "deptable.csv"))
 depdat <- read.digidat(deppth, exifdat=dep.exdat)
-animdat <- subset(depdat, species!="calibration")
 caldat <- pairup(subset(depdat, species=="calibration"), c("folder", "image_name"))
 View(depdat)
 View(animdat)
 View(caldat)
 
+(deptab <- read.csv(file.path(folder, "deptable.csv")))
 dmods <- cal.dep(caldat, cmods, "deployment", deptab)
-plot(smods)
+plot(dmods)
 
-posdat <- predict.pos(animdat, smods)
+animdat <- subset(depdat, species!="calibration")
+posdat <- predict.pos(animdat, dmods)
 View(animdat)
 View(posdat)
 hist(posdat$radius)
 hist(posdat$angle)
-as.POSIXct(animdat$DateTimeOriginal, tz="UTC", format="%Y:%m:%d %H:%M:%S")
 
 seqdat <- seq.summary(posdat)
 View(seqdat)
