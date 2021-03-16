@@ -85,7 +85,7 @@ peep.exif <- function(path, file.index=1){
     if(file.index<1 | file.index>n) stop(paste0("file.index must be between 1 and ", length(allfls), " (the number of files in ", path, ")"))
     path <- allfls[file.index]
   }
-  res <- read.exif(path)
+  res <- read.exif(path, "")
   vals <- as.character(res[1,])
   data.frame(Field=names(res), Value=vals, stringsAsFactors=FALSE)
 }
@@ -110,11 +110,12 @@ peep.exif <- function(path, file.index=1){
 #install.exiftool). Metadata is extracted from all jpeg images in the directory 
 #defined by path and all its subdirectories.
 #
-#By default (fields=""), all available tags are extracted. Fields that don't 
-#exist in the metadata are ignored with a warning. If no valid fields are 
-#found the function fails. The names of any values in fields are assigned to the
-#respective columns in the resulting dataframe, otherwise the original field 
-#name is preserved.
+#The default fields are required in subsequent processing functions, where these
+#exact names are expected. If the necessary metadata exist under a different 
+#field headings, the fields vector can be named, in which case element names are
+#assigned to the resulting field names. To extract all available fields, set
+#fields="". Specified fields that don't exist in the metadata are ignored with a
+#warning. If no valid fields are found the function fails. 
 #
 #If tagfield is provided, this field will be separated into 
 #multiple columns in the output using split.tags, with additional arguments 
@@ -126,7 +127,9 @@ peep.exif <- function(path, file.index=1){
 #in a folder named exiftool within the current R library, where the 
 #install.exiftool function places it.
 
-read.exif <- function(path, fields="", tagfield=NULL, toolpath=NULL, ...){
+read.exif <- function(path, 
+                      fields=c("Directory", "FileName", "DateTimeOriginal", "ImageWidth", "ImageHeight"), 
+                      tagfield=NULL, toolpath=NULL, ...){
   path <- normalizePath(path)
   if(length(path)>1) stop("path must be a string pointing to a single directory or file")
   if(is.null(toolpath)) toolpath <- file.path(.libPaths()[1], "exiftool")
@@ -573,7 +576,7 @@ split.tags <- function(dat, tagsep=", ", valsep="|"){
 #  - dir: full path to the containing directory
 #  - folder: name of the containing folder
 #  - image metadata from exifdat (if provided), matched using directory/file 
-#    combinations; columns dir and file must be present in exifdat for this
+#    combinations; columns Directory and FileName must be present in exifdat for this
 #    purpose.
 
 read.digidat <- function(path, exifdat=NULL){
@@ -611,14 +614,14 @@ read.digidat <- function(path, exifdat=NULL){
   df$sequence_id <- renumber(paste0(df$dir, df$sequence_id))
   
   if(!is.null(exifdat)){
-    if(!all(c("dir", "file") %in% names(exifdat)))
-      stop("exifdat must contain at least columns dir and file for matching")
+    if(!all(c("Directory", "FileName") %in% names(exifdat)))
+      stop("exifdat must contain at least columns Directory and file for matching")
     dfsource <- file.path(df$dir, df$image_name)
-    exifsource <- file.path(exifdat$dir, exifdat$file)
+    exifsource <- file.path(exifdat$Directory, exifdat$FileName)
     nmiss <- sum(!dfsource %in% exifsource)
     if(nmiss>0)
       stop(paste(nmiss, "out of", nrow(df), "digitised images not found in metadata"))
-    df <- cbind(df, exifdat[match(dfsource, exifsource), !names(exifdat) %in% c("dir", "file")])
+    df <- cbind(df, exifdat[match(dfsource, exifsource), !names(exifdat) %in% c("Directory", "FileName")])
   }
   df
 }
@@ -789,7 +792,7 @@ pairup <- function(dat, pairtag){
 # distance: pole distances from camera
 # length: length of pole between digitised points
 #  xt,yt,xb,yb: x,y pixel positions of digitised pole t(ops) and b(ases) in image
-#  xdim, ydim: x and y pixel dimensions of each image
+#  ImageWidth, ImageHeight: x and y pixel dimensions of each image
 #
 #If camtag is provided, one model is fitted for each unique camera ID, but 
 #camtag can be NULL if all data are for a single camera.
@@ -797,9 +800,9 @@ pairup <- function(dat, pairtag){
 cal.cam <- function(poledat, camtag=NULL){
   #Internal function fits a single camera calibration model
   cal <- function(dat){
-    dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
+    dim <- as.list(apply(dat[,c("ImageWidth","ImageHeight")], 2, unique))
     if(length(unlist(dim))>2) 
-      stop("There is more than one unique value per camera for xdim and/or ydim in poledat")
+      stop("There is more than one unique value per camera for ImageWidth and/or ImageHeight in poledat")
     names(dim) <- c("x","y")
     dat$pixlen <- with(dat, sqrt((xb-xt)^2 + (yb-yt)^2))
     dat$relx <- apply(dat[c("xb","xt")], 1, mean)/dim$x-0.5
@@ -816,7 +819,7 @@ cal.cam <- function(poledat, camtag=NULL){
     if(!camtag %in% names(poledat))
       stop(paste0("Can't find camtag column (", camtag, ") in poledat"))
   }
-  required <- c("xb", "yb", "xt", "yt", "xdim", "ydim", "distance", "length")
+  required <- c("xb", "yb", "xt", "yt", "ImageWidth", "ImageHeight", "distance", "length")
   if(!all(required %in% names(poledat))) 
     stop(paste("poledat must contain all of these columns:", paste(required, collapse=" ")))
   
@@ -960,7 +963,7 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
 #columns:
 #  xb, yb, xt, yt: x and y co-ordinates of pole b(ottom) and t(op) positions digitised
 #  hb, ht: actual heights above ground of the digitised pole positions
-#  xdim, ydim: x and y dimensions of each image
+#  ImageWidth, ImageHeight: x and y dimensions of each image
 #If cmods (camera calibration models) are provided Pole distances will be 
 #predicted using these models. If not, dat must also contain distance data in a 
 #column named distance.
@@ -981,9 +984,9 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
     if(nrow(dat)<minpoles){
       res <- list(cam.model=cmod, model=NULL, data=NULL, dim=NULL, id=id)
     } else{
-      dim <- as.list(apply(dat[,c("xdim","ydim")], 2, unique))
+      dim <- as.list(apply(dat[,c("ImageWidth","ImageHeight")], 2, unique))
       if(length(unlist(dim))>2) 
-        stop("There is more than one unique value per deployment for xdim and/or ydim in dat")
+        stop("There is more than one unique value per deployment for ImageWidth and/or ImageHeight in dat")
       names(dim) <- c("x","y")
       
       dat$rely <- dat$yg/dim$y
@@ -1067,7 +1070,7 @@ plot.depcal <- function(mod){
   if(is.null(mod$model)){
     message(paste("Model without a fit not plotted:", dep, "\n"))
   } else{
-    dim <- as.list(apply(mod$data[,c("xdim","ydim")],2,unique))
+    dim <- as.list(apply(mod$data[,c("ImageWidth","ImageHeight")],2,unique))
     dat <- mod$data
     colrange <- grey.colors(11, start=0, end=0.8)
     
@@ -1089,10 +1092,10 @@ plot.depcal <- function(mod){
     relht <- with(dat, (1-ht) / (ht-hb))
     xl <- with(dat, xt + relht*(xt-xb))
     yl <- with(dat, yt + relht*(yt-yb))
-    plot(c(0, dim$xdim), -c(0, dim$ydim), 
+    plot(c(0, dim$ImageWidth), -c(0, dim$ImageHeight), 
          asp=1, xlab="x pixel", ylab="y pixel", type="n", 
          main=dep, cex.sub=0.7)
-    lines(c(0,rep(c(dim$xdim,0),each=2)), c(rep(c(0,-dim$ydim),each=2),0), lty=2)
+    lines(c(0,rep(c(dim$ImageWidth,0),each=2)), c(rep(c(0,-dim$ImageHeight),each=2),0), lty=2)
     drange <- with(dat, (distance-min(distance))/diff(range(distance)))
     lwds <- 5-drange*3
     for(i in 1:nrow(dat)){
@@ -1193,11 +1196,11 @@ predict.r <- function(mod, relx, rely){
 #DETAILS
 #Input dat must contain (at least) columns:
 # x,y: x and y pixel positions for each digitised point
-# xdim,ydim: x and y pixel dimensions of each image; must be consistent for each deployment
+# ImageWidth,ImageHeight: x and y pixel dimensions of each image; must be consistent for each deployment
 
 predict.pos <- function(dat, mods, deptag="deployment"){
 
-  required <- c("x","y","xdim","ydim", deptag)
+  required <- c("x","y","ImageWidth","ImageHeight", deptag)
   if(!all(required %in% names(dat))) 
     stop(paste("dat must contain all of these columns:", paste(required, collapse=" ")))
 
@@ -1212,10 +1215,10 @@ predict.pos <- function(dat, mods, deptag="deployment"){
     deps <- deps[gotmodel]
   }
 
-  multidim <- lapply(tapply(dat$xdim, dat[,deptag], unique), length)>1 |
-              lapply(tapply(dat$ydim, dat[,deptag], unique), length)>1
+  multidim <- lapply(tapply(dat$ImageWidth, dat[,deptag], unique), length)>1 |
+              lapply(tapply(dat$ImageHeight, dat[,deptag], unique), length)>1
   if(any(multidim)){
-    message("Warning:\n There is more than one unique value per deployment for xdim and/or ydim in deployment(s):")
+    message("Warning:\n There is more than one unique value per deployment for ImageWidth and/or ImageHeight in deployment(s):")
     cat(names(which(multidim)), sep="\n")
   }
 
@@ -1223,8 +1226,8 @@ predict.pos <- function(dat, mods, deptag="deployment"){
     dt <- subset(dat, dat[,deptag]==d)
     cm <- mods[[d]]$cam.model
     sm <- mods[[d]]$model
-    data.frame(dt, radius=predict.r(sm, dt$x/dt$xdim-0.5, dt$y/dt$ydim),
-               angle=cm$APratio * (dt$x/dt$xdim-0.5))
+    data.frame(dt, radius=predict.r(sm, dt$x/dt$ImageWidth-0.5, dt$y/dt$ImageHeight),
+               angle=cm$APratio * (dt$x/dt$ImageWidth-0.5))
   })
   res <- dplyr::bind_rows(res)
   tab <- table(res$sequence_id)
@@ -1267,10 +1270,9 @@ seq.data <- function(dat){
 #Summarise sequences to generate speed of movement estimates
 
 #INPUT
-# Dataframe dat produced by predict.pos with (at least) columns:
-#  sequence_id: sequence identifiers
-#  CreateDate: character date and time of image creation, formated as %Y:%m:%d %H:%M:%S
-#  imgcount: the number of images in each sequence
+# dat: dataframe of position and time data grouped by sequence (see details)
+# datetimetag: the name of a field in dat containing text date/time of images
+# tformat: the format of the date/time records
 
 #OUTPUT
 #A dataframes containing original data for only sequences with two or more images,
@@ -1284,17 +1286,21 @@ seq.data <- function(dat){
 # frames: number of images in the sequence
 
 #DETAILS
+#Input data produced by predict.pos works, with (at least) columns:
+#  sequence_id: sequence identifiers
+#  a column of character date time data with name matching the datetimetag argument
+#
 #For sequences with more than 10 images, time is taken directly from timediff.
 #For shorter sequences, time is calculated as the number of image transitions
 #(frames-1) times the average transition time for those shorter sequences.
 
-seq.summary <- function(dat, datetimetag="datetime"){
+seq.summary <- function(dat, datetimetag="DateTimeOriginal", tformat="%Y:%m:%d %H:%M:%S"){
   calc.mov <- function(dat){
     n <- as.numeric(table(dat$sequence_id))
     dat <- seq.data(dat)
     pixdiff <- with(dat, tapply(pixdiff, sequence_id, sum, na.rm=T) )
     mvdist <- with(dat, tapply(displacement, sequence_id, sum, na.rm=T) )
-    tm <- strptime(dat[,datetimetag], format="%Y:%m:%d %H:%M:%S", tz="UTC")
+    tm <- as.POSIXct(dat[,datetimetag], format=tformat, tz="UTC")
     mvtime <- tapply(tm, dat$sequence_id, function(x) as.numeric(diff(range(x)), units="secs"))
     i <- n<11
     mntime <- sum(mvtime[i]) / (sum(n[i]) - sum(i))

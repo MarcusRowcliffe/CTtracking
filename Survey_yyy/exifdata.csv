@@ -1,4 +1,4 @@
-"dir","file","datetime","xdim","ydim","station","deployment","species","count","contact"
+"Directory","FileName","DateTimeOriginal","ImageWidth","ImageHeight","station","deployment","species","count","contact"
 "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/Survey_yyy/Deployments/S01","IMG_0001.JPG","2017:10:02 19:06:43",2048,1536,"S01","S01","fox",1,1
 "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/Survey_yyy/Deployments/S01","IMG_0002.JPG","2017:10:02 19:06:44",2048,1536,"S01","S01","fox",1,NA
 "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/GitHub/CTtracking/Survey_yyy/Deployments/S01","IMG_0003.JPG","2017:10:02 19:06:45",2048,1536,"S01","S01","fox",1,NA
