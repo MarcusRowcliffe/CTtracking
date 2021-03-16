@@ -19,6 +19,9 @@ plot(cmods)
 #Do this first time
 deppth <- file.path(folder, "Deployments")
 View(peep.exif(deppth))
+peep <- head(peep.exif(deppth))
+peep$Value <- strtrim(peep$Value, 29)
+peep
 dep.exdat <- read.exif(deppth, tagfield="Keywords")
 View(dep.exdat)
 write.csv(dep.exdat, file.path(folder, "exifdata.csv"), row.names = FALSE)
