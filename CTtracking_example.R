@@ -30,6 +30,9 @@ write.csv(dep.exdat, file.path(folder, "exifdata.csv"), row.names = FALSE)
 deppth <- file.path(folder, "Deployments")
 dep.exdat <- read.csv(file.path(folder, "exifdata.csv"), stringsAsFactors = FALSE)
 
+debug(image.copy)
+sub.exdat <- image.copy(dep.exdat, file.path(folder, "CopiedImages"), "!is.na(species)")
+
 #Deployment calibration models
 depdat <- read.digidat(deppth, exifdat=dep.exdat)
 caldat <- pairup(subset(depdat, species=="calibration"), c("folder", "image_name"))

@@ -203,23 +203,26 @@ image.copy <- function(exifdat, to, criterion=TRUE){
   if(!all(c("Directory", "FileName") %in% names(exifdat)))
     stop("exifdat must contain columns Directory and FileName")
   fullfiles <- file.path(exifdat$Directory, exifdat$FileName)
-  ff <- strsplit(allfiles, "/", fixed=TRUE)
+  ff <- strsplit(fullfiles, "/", fixed=TRUE)
   mat <- suppressWarnings(do.call(rbind, ff))
   i <- sum(apply(mat, 2, function(x) length(unique(x)))==1)
   basefiles <- unlist(unique(lapply(ff, function(x) paste(x[(i+1):length(x)], collapse="/"))))
-  subdat <- try(subset(exifdat, eval(parse(text=criterion))))
+  subdat <- try(subset(exifdat, eval(parse(text=criterion))), silent=TRUE)
   
-  if(class(subdat)=="try-error")
-    stop("Can't find a column named in criterion in exifdat")
-
+  if(class(subdat)=="try-error"){
+    tt <- unlist(strsplit(subdat[[1]], ":"))
+    msg <- paste(c("There is a problem with the criterion", tail(tt,-1)), collapse=":")
+    stop(msg)
+  }
   selec <- rownames(exifdat) %in% rownames(subdat)
   files <- fullfiles[selec]
   newfiles <- file.path(to, basefiles[selec])
   nfound <- sum(file.exists(files))
   nexist <- sum(file.exists(newfiles))
-  message(paste(sum(selec), "Number of images selected to copy...\n"),
+  message(paste(nrow(exifdat), "images in exifdat...\n"),
+          paste(sum(selec), "of which selected by criterion...\n"),
           paste(nfound,  "of which exist in source directory...\n"),
-          paste(nfound-nexist, "of which do(es) not yet exist in destination folder."))
+          paste(nfound-nexist, "of which do not yet exist in destination folder."))
   if(nfound==nexist | nfound==0){
     message("Nothing to copy")
   } else{
@@ -231,7 +234,9 @@ image.copy <- function(exifdat, to, criterion=TRUE){
       newdirs <- file.path(to, c("", unique(dirname(basefiles))))
       for(dir in newdirs) if(!dir.exists(dir)) dir.create(dir, recursive=TRUE)
       ncopied <- sum(file.copy(files, newfiles))
-      message(paste(ncopied, "file(s) copied to", normalizePath(to)))
+      message(paste(ncopied, "file(s) copied to:\n", normalizePath(to)))
+      subdat$Directory <- gsub("\\", "/", normalizePath(dirname(newfiles)), fixed=TRUE)
+      return(subdat)
     }
   }
 }
