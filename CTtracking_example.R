@@ -31,7 +31,9 @@ deppth <- file.path(folder, "Deployments")
 dep.exdat <- read.csv(file.path(folder, "exifdata.csv"), stringsAsFactors = FALSE)
 
 debug(image.copy)
-sub.exdat <- image.copy(dep.exdat, file.path(folder, "CopiedImages"), "!is.na(species)")
+newpth <- file.path(folder, "CopiedImages")
+sub.exdat <- image.copy(dep.exdat, newpth, "!is.na(species)")
+sub.exdat <- read.csv(file.path(folder, "exifdata.csv"), stringsAsFactors = FALSE)
 
 #Deployment calibration models
 depdat <- read.digidat(deppth, exifdat=dep.exdat)

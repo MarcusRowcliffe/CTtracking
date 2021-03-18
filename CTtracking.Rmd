@@ -1,8 +1,8 @@
 ---
 title: Protocol for generating distance data from camera trap images using a simple
-  computer vision approach, CTtracking V0.3
+  computer vision approach, CTtracking V0.3.1
 author: "Marcus Rowcliffe"
-date: "16 March 2021"
+date: "18 March 2021"
 output:
   word_document: default
   toc: true
@@ -96,7 +96,7 @@ text(0,0,"Camera", pos=2, col="darkred")
 ## 2. Digitising images
 
 ### Animaltracker basics
-1. Organise images into folders specific to the deployment (for animal and deployment calibration images) or camera (for camera calibration images), naming folders with identifiers unique to the deployment or camera type as appropriate. Deployment calibration and animal images can be left in the same folders, but keep the camera and deployment image sets on separate paths.
+1. Organise images into folders specific to the deployment (for animal and deployment calibration images) or camera (for camera calibration images), naming folders with identifiers unique to the deployment or camera type as appropriate. Deployment calibration and animal images can be left in the same folders, but keep the camera and deployment image sets on separate paths. Before starting, it may be helpful to separate out a subset of images and work with these rather than loading the full set in to Animaltracker (see Fitting deployment calibration models point 1 below for details of how to do this).
 
 2. Open animal tracker: <https://lauravzarco.github.io/animaltracker>
 
@@ -150,7 +150,7 @@ Or you can load it directly from Github like this:
 devtools::source_url("https://raw.githubusercontent.com/MarcusRowcliffe/CTtracking/master/CTtracking.r")
 ```
 
-### Extraction image exif data (metadata)
+### Extraction of image exif data (metadata)
 A core processing step is to inspect and extract relevant metadata from images. Functions for this use the exiftool utility available at (<https://exiftool.org/>). This must be installed as a one-off (or occasional update). The easiest way to install is to run:
 ```{r eval=FALSE}
 install.exiftool()
@@ -222,6 +222,13 @@ write.csv(dep.exdat, file.path(folder, "exifdata.csv"), row.names = FALSE)
 dep.exdat <- read.csv(file.path(folder, "exifdata.csv"), 
                       stringsAsFactors = FALSE)
 ```
+
+When you have a large number of images per directory, only a small proportion of which  require digitisation, it may be more efficient to copy the desired images into a new directory, and digitise these instead of working with the full set. Function `image.copy` allows you to do this in a single step, based on tag information. The function takes a dataframe of image metadata as extracted in the last step, plus a logical criterion defining which images listed in exifdat to copy, and copies these images to a given location. For example, this code copies only those images where a species tag has been assigned:
+```{r eval=FALSE}
+newpth <- file.path(folder, "CopiedImages")
+sub.exdat <- image.copy(dep.exdat, to=newpth, criterion="!is.na(species)")
+```
+In this case you would then use sub.exdat in place of dep.exdat in the steps below.
 
 2. Create a dataframe of deployment digitisation data, pooling across csv files from multiple deployments. First, run `read.digidat`, specifying a path to the folder containing all images, and the metadata data frame created above. This will extract from all images, both calibration and animal, so in a subsequent step, filter out only calibration images, and feed these into the `pairup` function as for camera calibration images:
 ```{r warning=FALSE, results=FALSE, message=FALSE}
