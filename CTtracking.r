@@ -179,23 +179,6 @@ read.exif <- function(path,
   type.convert(dfout, as.is=TRUE)
 }
 
-
-#list.files.only#
-
-#Wrapper for list.files that over-rides include.dirs argument to return only file names
-
-#INPUT and OUTPUT
-# As for list.files (... passes additional arguments to list.files)
-list.files.only <- function(path, ...){
-  args <- c(path=path, list(...))
-  if("full.names" %in% names(args)) fn <- TRUE else fn <- FALSE
-  if(fn) args$full.names <- TRUE else args <- c(args, full.names=TRUE)
-  fls <-  do.call(list.files, args)
-  res <- fls[!file.info(fls)$isdir]
-  if(!fn) res <- basename(res)
-  res
-}
-
 #image.copy#
 
 #Copies images to a new location, preserving the directory structure from the
