@@ -196,6 +196,63 @@ list.files.only <- function(path, ...){
   res
 }
 
+#image.copy#
+
+#Copies images to a new location, preserving the directory structure from the
+#original location.
+
+#INPUT
+# exifdat: a dataframe of image metadata
+# to: a character string naming a folder to which to copy
+# criterion: a logical expression in character form defining the images to select
+
+#DETAILS
+#The exifdat input must contain at least columns Directory and FileName.
+#If the folder named by the to argument does not exist it will be created. The 
+#default criterion (TRUE) copies all the images in exifdat. If a more complex 
+#logical expression is provided, it should refer to one or more columns in exifdat. 
+#Because criterion takes character form, any quote marks within the string need to 
+#be escaped using \. For example, if you want to select only images where "fox" 
+#is tagged in the species column, pass "species==\"fox\"" to the criterion
+#argument. 
+
+image.copy <- function(exifdat, to, criterion=TRUE){
+  if(!all(c("Directory", "FileName") %in% names(exifdat)))
+    stop("exifdat must contain columns Directory and FileName")
+  fullfiles <- file.path(exifdat$Directory, exifdat$FileName)
+  ff <- strsplit(allfiles, "/", fixed=TRUE)
+  mat <- suppressWarnings(do.call(rbind, ff))
+  i <- sum(apply(mat, 2, function(x) length(unique(x)))==1)
+  basefiles <- unlist(unique(lapply(ff, function(x) paste(x[(i+1):length(x)], collapse="/"))))
+  subdat <- try(subset(exifdat, eval(parse(text=criterion))))
+  
+  if(class(subdat)=="try-error")
+    stop("Can't find a column named in criterion in exifdat")
+
+  selec <- rownames(exifdat) %in% rownames(subdat)
+  files <- fullfiles[selec]
+  newfiles <- file.path(to, basefiles[selec])
+  nfound <- sum(file.exists(files))
+  nexist <- sum(file.exists(newfiles))
+  message(paste(sum(selec), "Number of images selected to copy...\n"),
+          paste(nfound,  "of which exist in source directory...\n"),
+          paste(nfound-nexist, "of which do(es) not yet exist in destination folder."))
+  if(nfound==nexist | nfound==0){
+    message("Nothing to copy")
+  } else{
+    inpt <- ""
+    inpt <- tolower(readline(prompt="Start copying (y/n)? "))
+    while(!inpt %in% c("y","n"))
+      inpt <- tolower(readline(prompt="Type y for yes or n for no: "))
+    if(inpt=="y"){
+      newdirs <- file.path(to, c("", unique(dirname(basefiles))))
+      for(dir in newdirs) if(!dir.exists(dir)) dir.create(dir, recursive=TRUE)
+      ncopied <- sum(file.copy(files, newfiles))
+      message(paste(ncopied, "file(s) copied to", normalizePath(to)))
+    }
+  }
+}
+
 #VIDEO PROCESSING FUNCTIONS#############################################
 
 

@@ -55,4 +55,4 @@ install.packages("jpeg")
 library(jpeg)
 show.image(animdat, file.path(deppth, "S01"), "anim")
 View(animdat)
-??readJPEG
+
