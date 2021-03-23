@@ -181,16 +181,21 @@ read.exif <- function(path,
 
 #image.copy#
 
-#Copies images to a new location, preserving the directory structure from the
-#original location.
+#Copies images to a new location, optionally preserving the directory structure 
+#from the #original location.
 
 #INPUT
-# exifdat: a dataframe of image metadata
 # to: a character string naming a folder to which to copy
-# criterion: a logical expression in character form defining the images to select
+# from: a character string naming a folder from which to copy
+# exifdat: a dataframe of image metadata
+# criterion: a logical expression in character form defining the images to select from exifdat
+# structure: logical, whether to preserve folder structure (all files copied to root to dir if false)
+# recursive: logical, whether to extract from subfolders of from (ignored if exifdat used)
 
 #DETAILS
-#The exifdat input must contain at least columns Directory and FileName.
+#Either from or exifdat must be provided, but not both. The criterion argument
+#refers to data in exifdat, so is ignored if exifdat is not used. If used,
+#the exifdat input must contain at least columns Directory and FileName.
 #If the folder named by the to argument does not exist it will be created. The 
 #default criterion (TRUE) copies all the images in exifdat. If a more complex 
 #logical expression is provided, it should refer to one or more columns in exifdat. 
@@ -199,30 +204,43 @@ read.exif <- function(path,
 #is tagged in the species column, pass "species==\"fox\"" to the criterion
 #argument. 
 
-image.copy <- function(exifdat, to, criterion=TRUE){
-  if(!all(c("Directory", "FileName") %in% names(exifdat)))
-    stop("exifdat must contain columns Directory and FileName")
-  fullfiles <- file.path(exifdat$Directory, exifdat$FileName)
-  ff <- strsplit(fullfiles, "/", fixed=TRUE)
-  mat <- suppressWarnings(do.call(rbind, ff))
-  i <- sum(apply(mat, 2, function(x) length(unique(x)))==1)
-  basefiles <- unlist(unique(lapply(ff, function(x) paste(x[(i+1):length(x)], collapse="/"))))
-  subdat <- try(subset(exifdat, eval(parse(text=criterion))), silent=TRUE)
-  
-  if(class(subdat)=="try-error"){
-    tt <- unlist(strsplit(subdat[[1]], ":"))
-    msg <- paste(c("There is a problem with the criterion", tail(tt,-1)), collapse=":")
-    stop(msg)
+image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TRUE, recursive=TRUE){
+  if(is.null(exifdat) + is.null(from) != 1)
+    stop("Either directory path (from=) or exif dataframe (exifdat=) must be provided, but not both")
+  if(!is.null(from)){
+    files <- list.files(from, pattern=".jpg", full.names=TRUE, 
+                        recursive=recursive, ignore.case=TRUE)
+  } else
+  if(!is.null(exifdat)){
+    if(!all(c("Directory", "FileName") %in% names(exifdat)))
+      stop("exifdat must contain columns Directory and FileName")
+    subdat <- try(subset(exifdat, eval(parse(text=criterion))), silent=TRUE)
+    if(class(subdat)=="try-error"){
+      tt <- unlist(strsplit(subdat[[1]], ":"))
+      msg <- paste(c("There is a problem with the criterion", tail(tt,-1)), collapse=":")
+      stop(msg)
+    }
+    files <- file.path(subdat$Directory, subdat$FileName)
   }
-  selec <- rownames(exifdat) %in% rownames(subdat)
-  files <- fullfiles[selec]
-  newfiles <- file.path(to, basefiles[selec])
-  nfound <- sum(file.exists(files))
+
+  if(structure){
+    ff <- strsplit(files, "/", fixed=TRUE)
+    mat <- suppressWarnings(do.call(rbind, ff))
+    i <- sum(apply(mat, 2, function(x) length(unique(x)))==1)
+    basefiles <- unlist(unique(lapply(ff, function(x)
+      paste(x[(i+1):length(x)], collapse="/"))))
+  } else{
+    basefiles <- basename(files)
+    if(length(unique(basefiles)) != length(basefiles))
+      stop("Not all file names are unique, but you have chosen not to preserve the folder structure")
+  }
+    
+  newfiles <- file.path(to, basefiles)
+  nfound <- length(files)
   nexist <- sum(file.exists(newfiles))
-  message(paste(nrow(exifdat), "images in exifdat...\n"),
-          paste(sum(selec), "of which selected by criterion...\n"),
-          paste(nfound,  "of which exist in source directory...\n"),
+  message(paste(nfound, "images found to copy...\n"),
           paste(nfound-nexist, "of which do not yet exist in destination folder."))
+
   if(nfound==nexist | nfound==0){
     message("Nothing to copy")
   } else{
@@ -230,13 +248,16 @@ image.copy <- function(exifdat, to, criterion=TRUE){
     inpt <- tolower(readline(prompt="Start copying (y/n)? "))
     while(!inpt %in% c("y","n"))
       inpt <- tolower(readline(prompt="Type y for yes or n for no: "))
+    
     if(inpt=="y"){
       newdirs <- file.path(to, c("", unique(dirname(basefiles))))
       for(dir in newdirs) if(!dir.exists(dir)) dir.create(dir, recursive=TRUE)
       ncopied <- sum(file.copy(files, newfiles))
-      message(paste(ncopied, "file(s) copied to:\n", normalizePath(to)))
-      subdat$Directory <- gsub("\\", "/", normalizePath(dirname(newfiles)), fixed=TRUE)
-      return(subdat)
+      message(paste(ncopied, "file(s) copied to:\n", normalizePath(to), "\n"))
+      if(!is.null(exifdat)){
+        subdat$Directory <- gsub("\\", "/", normalizePath(dirname(newfiles)), fixed=TRUE)
+        return(subdat)
+      }
     }
   }
 }
