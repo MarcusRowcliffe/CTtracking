@@ -354,8 +354,6 @@ read.digidat <- function(path, exifdat=NULL){
   
   if("height" %in% names(df))
     df$height <- as.numeric(df$height) else
-      if(pair)
-        stop("If data contains pole digitisation pairs, input must contain a column named height")
 
   sicol <- which(names(df)=="sequence_id")
   df <- cbind(df[,1:sicol], sequence_id_original=df$sequence_id, df[,(sicol+1):ncol(df)])
@@ -451,7 +449,6 @@ pairup <- function(dat, pairtag){
     j <- 2*(1:(nrow(dat)/2))
     xy <- cbind(dat[j, c("x","y")], dat[j-1, c("x","y")])
     names(xy) <- c("xb","yb","xt","yt")
-#    xy$pixlen <- with(xy, sqrt((xt-xb)^2 + (yt-yb)^2))
     if("height" %in% names(dat)){
       xy <- cbind(hb=dat$height[j], ht=dat$height[j-1], length=dat$height[j-1]-dat$height[j], xy)
       relh <- with(xy, hb/length)
