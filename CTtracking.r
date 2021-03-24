@@ -353,7 +353,7 @@ read.digidat <- function(path, exifdat=NULL){
               dplyr::bind_rows(df.list))
   
   if("height" %in% names(df))
-    df$height <- as.numeric(df$height) else
+    df$height <- as.numeric(df$height)
 
   sicol <- which(names(df)=="sequence_id")
   df <- cbind(df[,1:sicol], sequence_id_original=df$sequence_id, df[,(sicol+1):ncol(df)])
