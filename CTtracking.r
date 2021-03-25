@@ -1,5 +1,3 @@
-#V0.2
-
 #NOTES ON PREPARING FILES####
 
 #Before digitising, ensure that images are organised into placement_specific folders, 
@@ -181,16 +179,21 @@ read.exif <- function(path,
 
 #image.copy#
 
-#Copies images to a new location, preserving the directory structure from the
-#original location.
+#Copies images to a new location, optionally preserving the directory structure 
+#from the #original location.
 
 #INPUT
-# exifdat: a dataframe of image metadata
 # to: a character string naming a folder to which to copy
-# criterion: a logical expression in character form defining the images to select
+# from: a character string naming a folder from which to copy
+# exifdat: a dataframe of image metadata
+# criterion: a logical expression in character form defining the images to select from exifdat
+# structure: logical, whether to preserve folder structure (all files copied to root to dir if false)
+# recursive: logical, whether to extract from subfolders of from (ignored if exifdat used)
 
 #DETAILS
-#The exifdat input must contain at least columns Directory and FileName.
+#Either from or exifdat must be provided, but not both. The criterion argument
+#refers to data in exifdat, so is ignored if exifdat is not used. If used,
+#the exifdat input must contain at least columns Directory and FileName.
 #If the folder named by the to argument does not exist it will be created. The 
 #default criterion (TRUE) copies all the images in exifdat. If a more complex 
 #logical expression is provided, it should refer to one or more columns in exifdat. 
@@ -199,30 +202,43 @@ read.exif <- function(path,
 #is tagged in the species column, pass "species==\"fox\"" to the criterion
 #argument. 
 
-image.copy <- function(exifdat, to, criterion=TRUE){
-  if(!all(c("Directory", "FileName") %in% names(exifdat)))
-    stop("exifdat must contain columns Directory and FileName")
-  fullfiles <- file.path(exifdat$Directory, exifdat$FileName)
-  ff <- strsplit(fullfiles, "/", fixed=TRUE)
-  mat <- suppressWarnings(do.call(rbind, ff))
-  i <- sum(apply(mat, 2, function(x) length(unique(x)))==1)
-  basefiles <- unlist(unique(lapply(ff, function(x) paste(x[(i+1):length(x)], collapse="/"))))
-  subdat <- try(subset(exifdat, eval(parse(text=criterion))), silent=TRUE)
-  
-  if(class(subdat)=="try-error"){
-    tt <- unlist(strsplit(subdat[[1]], ":"))
-    msg <- paste(c("There is a problem with the criterion", tail(tt,-1)), collapse=":")
-    stop(msg)
+image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TRUE, recursive=TRUE){
+  if(is.null(exifdat) + is.null(from) != 1)
+    stop("Either directory path (from=) or exif dataframe (exifdat=) must be provided, but not both")
+  if(!is.null(from)){
+    files <- list.files(from, pattern=".jpg", full.names=TRUE, 
+                        recursive=recursive, ignore.case=TRUE)
+  } else
+  if(!is.null(exifdat)){
+    if(!all(c("Directory", "FileName") %in% names(exifdat)))
+      stop("exifdat must contain columns Directory and FileName")
+    subdat <- try(subset(exifdat, eval(parse(text=criterion))), silent=TRUE)
+    if(class(subdat)=="try-error"){
+      tt <- unlist(strsplit(subdat[[1]], ":"))
+      msg <- paste(c("There is a problem with the criterion", tail(tt,-1)), collapse=":")
+      stop(msg)
+    }
+    files <- file.path(subdat$Directory, subdat$FileName)
   }
-  selec <- rownames(exifdat) %in% rownames(subdat)
-  files <- fullfiles[selec]
-  newfiles <- file.path(to, basefiles[selec])
-  nfound <- sum(file.exists(files))
+
+  if(structure){
+    ff <- strsplit(files, "/", fixed=TRUE)
+    mat <- suppressWarnings(do.call(rbind, ff))
+    i <- sum(apply(mat, 2, function(x) length(unique(x)))==1)
+    basefiles <- unlist(unique(lapply(ff, function(x)
+      paste(x[(i+1):length(x)], collapse="/"))))
+  } else{
+    basefiles <- basename(files)
+    if(length(unique(basefiles)) != length(basefiles))
+      stop("Not all file names are unique, but you have chosen not to preserve the folder structure")
+  }
+    
+  newfiles <- file.path(to, basefiles)
+  nfound <- length(files)
   nexist <- sum(file.exists(newfiles))
-  message(paste(nrow(exifdat), "images in exifdat...\n"),
-          paste(sum(selec), "of which selected by criterion...\n"),
-          paste(nfound,  "of which exist in source directory...\n"),
+  message(paste(nfound, "images found to copy...\n"),
           paste(nfound-nexist, "of which do not yet exist in destination folder."))
+
   if(nfound==nexist | nfound==0){
     message("Nothing to copy")
   } else{
@@ -230,13 +246,16 @@ image.copy <- function(exifdat, to, criterion=TRUE){
     inpt <- tolower(readline(prompt="Start copying (y/n)? "))
     while(!inpt %in% c("y","n"))
       inpt <- tolower(readline(prompt="Type y for yes or n for no: "))
+    
     if(inpt=="y"){
       newdirs <- file.path(to, c("", unique(dirname(basefiles))))
       for(dir in newdirs) if(!dir.exists(dir)) dir.create(dir, recursive=TRUE)
       ncopied <- sum(file.copy(files, newfiles))
-      message(paste(ncopied, "file(s) copied to:\n", normalizePath(to)))
-      subdat$Directory <- gsub("\\", "/", normalizePath(dirname(newfiles)), fixed=TRUE)
-      return(subdat)
+      message(paste(ncopied, "file(s) copied to:\n", normalizePath(to), "\n"))
+      if(!is.null(exifdat)){
+        subdat$Directory <- gsub("\\", "/", normalizePath(dirname(newfiles)), fixed=TRUE)
+        return(subdat)
+      }
     }
   }
 }
@@ -332,9 +351,7 @@ read.digidat <- function(path, exifdat=NULL){
               dplyr::bind_rows(df.list))
   
   if("height" %in% names(df))
-    df$height <- as.numeric(df$height) else
-      if(pair)
-        stop("If data contains pole digitisation pairs, input must contain a column named height")
+    df$height <- as.numeric(df$height)
 
   sicol <- which(names(df)=="sequence_id")
   df <- cbind(df[,1:sicol], sequence_id_original=df$sequence_id, df[,(sicol+1):ncol(df)])
@@ -345,9 +362,11 @@ read.digidat <- function(path, exifdat=NULL){
       stop("exifdat must contain at least columns Directory and file for matching")
     dfsource <- file.path(df$dir, df$image_name)
     exifsource <- file.path(exifdat$Directory, exifdat$FileName)
-    nmiss <- sum(!dfsource %in% exifsource)
-    if(nmiss>0)
-      stop(paste(nmiss, "out of", nrow(df), "digitised images not found in metadata"))
+    miss <- !dfsource %in% exifsource
+    if(sum(miss)>0){
+      cat(dfsource[miss], sep="\n")
+      stop(paste(sum(miss), "out of", nrow(df), "digitised images not found in exifdat (named above)"))
+    }
     df <- cbind(df, exifdat[match(dfsource, exifsource), !names(exifdat) %in% c("Directory", "FileName")])
   }
   df
@@ -430,7 +449,6 @@ pairup <- function(dat, pairtag){
     j <- 2*(1:(nrow(dat)/2))
     xy <- cbind(dat[j, c("x","y")], dat[j-1, c("x","y")])
     names(xy) <- c("xb","yb","xt","yt")
-#    xy$pixlen <- with(xy, sqrt((xt-xb)^2 + (yt-yb)^2))
     if("height" %in% names(dat)){
       xy <- cbind(hb=dat$height[j], ht=dat$height[j-1], length=dat$height[j-1]-dat$height[j], xy)
       relh <- with(xy, hb/length)
@@ -459,25 +477,26 @@ pairup <- function(dat, pairtag){
   }
   dat$pair_id <- tidyr::unite(dat[, pairtag], "pr", sep="/")$pr
   
-  duff1 <- duff2 <- duff3 <- NULL
+  duff2 <- duff3 <- duff4 <- FALSE
   tab <- table(dat$pair_id)
-  if("height" %in% names(dat)){ 
-    miny <- with(dat, tapply(y, pair_id, min))
-    maxy <- with(dat, tapply(y, pair_id, max))
-    i <- match(dat$pair_id, names(miny))
-    duff1 <- tab>1 & with(dat, height[y==miny[i]] <= height[y==maxy[i]]) #base height >= top height
+  i <- which(sequence(tab)==1)
+  iduff1 <- !1:nrow(dat) %in% c(i, tail(i,-1)-1, nrow(dat)) #surplus points (>2)
+  duff1 <- tapply(iduff1, dat$pair_id, any)
+  if("height" %in% names(dat)) 
     duff2 <- tab==1 #Only one point digitised
-  }
   if("distance" %in% names(dat)) #Paired points at different distances
     duff3 <- with(dat, tapply(distance, dat$pair_id, min) != tapply(distance, dat$pair_id, max))
-  i <- which(sequence(tab)==1)
-  iduff4 <- !1:nrow(dat) %in% c(i, tail(i,-1)-1, nrow(dat)) #surplus points (>2)
-  duff4 <- tapply(iduff4, dat$pair_id, any)
+
+  dat <- pair(dat[!(dat$pair_id %in% names(which(duff2 | duff3)) | iduff1), ])
+  
+  if("hb" %in% names(dat)){ 
+    duff4 <- tab>1 & with(dat, hb>=ht) #base height >= top height
+  }
 
   if(any(duff1 | duff2 | duff3 | duff4)){
     message("Warning:\n Some rows were discarded because...")
     if(any(duff1)){
-      message("...the pole base height was greater than or equal to top height:")
+      message("...the pole had more than two points digitised:")
       cat(names(which(duff1)), sep="\n")
     }
     if(any(duff2)){
@@ -489,11 +508,12 @@ pairup <- function(dat, pairtag){
       cat(names(which(duff3)), sep="\n")
     }
     if(any(duff4)){
-      message("...the pole had more than two points digitised:")
+      message("...the pole base height was greater than or equal to top height:")
       cat(names(which(duff4)), sep="\n")
     }
   }
-  pair(dat[!(dat$pair_id %in% names(which(duff1 | duff2 | duff3)) | iduff4), ])
+  
+  subset(dat, !pair_id %in% names(which(duff4)))
 }
 
 #CALIBRATION FUNCTIONS#############################################
@@ -691,7 +711,7 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
 #  xb, yb, xt, yt: x and y co-ordinates of pole b(ottom) and t(op) positions digitised
 #  hb, ht: actual heights above ground of the digitised pole positions
 #  ImageWidth, ImageHeight: x and y dimensions of each image
-#If cmods (camera calibration models) are provided Pole distances will be 
+#If cmods (camera calibration models) are provided pole distances will be 
 #predicted using these models. If not, dat must also contain distance data in a 
 #column named distance.
 
@@ -756,25 +776,28 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
             }
         }
 
-        cmod <- if(is.null(cmods)) cal.cam(dat) else
-          if(length(cmods)==1) cmods[[1]]
-        if(is.null(deptag))
-          res <- list(cal(dat, NULL, cmod)) else{
-            deps <- unique(dat[,deptag])
-            res <- lapply(deps, function(d){
-              cam <- lookup$camera[lookup[,deptag]==d]
-              cmod <- cmods[[cam]]
-              cal(dat[dat[,deptag]==d, ], d, cmod)
-            })
-            names(res) <- deps
-          }
-        
-        nofits <- unlist(lapply(res, function(m) is.null(m$model)))
-        if(any(nofits)){
-          message("Warning: One or more deployments had too few poles to fit a model:")
-          cat(deps[nofits], sep="\n")
+  if(is.null(cmods)) cmod <- cal.cam(dat) else
+    if(length(cmods)==1) cmod <- cmods[[1]]
+    
+  if(is.null(deptag))
+    res <- list(cal(dat, NULL, cmod)) else{
+      deps <- unique(dat[,deptag])
+      res <- lapply(deps, function(d){
+        if(length(cmods)>1){
+          cam <- lookup$camera[lookup[,deptag]==d]
+          cmod <- cmods[[cam]]
         }
-        calibs(res)
+        cal(dat[dat[,deptag]==d, ], d, cmod)
+      })
+      names(res) <- deps
+    }
+  
+  nofits <- unlist(lapply(res, function(m) is.null(m$model)))
+  if(any(nofits)){
+    message("Warning: One or more deployments had too few poles to fit a model:")
+    cat(deps[nofits], sep="\n")
+  }
+  calibs(res)
 }
 
 
@@ -817,15 +840,13 @@ plot.depcal <- function(mod){
     
     #PLOT POLE IMAGE
     relht <- with(dat, (1-ht) / (ht-hb))
-    xl <- with(dat, xt + relht*(xt-xb))
-    yl <- with(dat, yt + relht*(yt-yb))
     plot(c(0, dim$ImageWidth), -c(0, dim$ImageHeight), 
          asp=1, xlab="x pixel", ylab="y pixel", type="n", 
          main=dep, cex.sub=0.7)
     lines(c(0,rep(c(dim$ImageWidth,0),each=2)), c(rep(c(0,-dim$ImageHeight),each=2),0), lty=2)
     cols <- colrange[with(dat, 1+round(10*((distance-min(distance))/diff(range(distance)))))]
     for(i in 1:nrow(dat)){
-      with(dat, lines(c(xg[i],xl[i]), -c(yg[i],yl[i]), col=cols))
+      with(dat, lines(c(xg[i],xt[i]), -c(yg[i],yt[i]), col=cols))
       with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
     }
   }
