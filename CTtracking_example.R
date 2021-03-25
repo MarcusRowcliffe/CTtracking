@@ -1,6 +1,6 @@
 #Using V0.2 (Laura Vargas Zarco version of Animaltracker)
 
-#devtools::source_url("https://raw.githubusercontent.com/MarcusRowcliffe/CTtracking/master/CTtracking.r")
+devtools::source_url("https://raw.githubusercontent.com/MarcusRowcliffe/CTtracking/V0.3.2/CTtracking.r")
 source("CTtracking.r")
 
 #install.exiftool()
@@ -32,8 +32,7 @@ deppth <- file.path(folder, "Deployments")
 dep.exdat <- read.csv(file.path(folder, "exifdata.csv"), stringsAsFactors = FALSE)
 
 newpth <- file.path(folder, "CopiedImages")
-sub.exdat <- image.copy(dep.exdat, newpth, "!is.na(species)")
-"species==\"badger\" | species==\"calibration\""
+sub.exdat <- image.copy(newpth, exifdat=dep.exdat, criterion="!is.na(species)")
 sub.exdat <- read.csv(file.path(folder, "exifdata.csv"), stringsAsFactors = FALSE)
 
 #Deployment calibration models

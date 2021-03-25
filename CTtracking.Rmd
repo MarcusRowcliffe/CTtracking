@@ -1,8 +1,8 @@
 ---
 title: Protocol for generating distance data from camera trap images using a simple
-  computer vision approach, CTtracking V0.3.1
+  computer vision approach, CTtracking V0.3.2
 author: "Marcus Rowcliffe"
-date: "18 March 2021"
+date: "25 March 2021"
 output:
   word_document: default
   toc: true
@@ -226,7 +226,7 @@ dep.exdat <- read.csv(file.path(folder, "exifdata.csv"),
 When you have a large number of images per directory, only a small proportion of which  require digitisation, it may be more efficient to copy the desired images into a new directory, and digitise these instead of working with the full set. Function `image.copy` allows you to do this in a single step, based on tag information. The function takes a dataframe of image metadata as extracted in the last step, plus a logical criterion defining which images listed in exifdat to copy, and copies these images to a given location. For example, this code copies only those images where a species tag has been assigned:
 ```{r eval=FALSE}
 newpth <- file.path(folder, "CopiedImages")
-sub.exdat <- image.copy(dep.exdat, to=newpth, criterion="!is.na(species)")
+sub.exdat <- image.copy(newpth, exifdat=dep.exdat, criterion="!is.na(species)")
 ```
 In this case you would then use sub.exdat in place of dep.exdat in the steps below.
 
