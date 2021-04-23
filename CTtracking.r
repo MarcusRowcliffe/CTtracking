@@ -367,10 +367,12 @@ read.digidat <- function(path, exifdat=NULL){
     miss <- !dfsource %in% exifsource
     if(sum(miss)>0){
       cat(dfsource[miss], sep="\n")
-      warning(paste(sum(miss), "out of", nrow(df), "digitised images not found in exifdat (named above)"))
+      warning(paste(sum(miss), "out of", nrow(df), "digitised images not found in exifdat (named above) and were discarded"))
       df <- subset(df, !miss)
     }
-    df <- cbind(df, exifdat[match(dfsource, exifsource), !names(exifdat) %in% c("Directory", "FileName")])
+    i <- match(file.path(df$dir, df$image_name), exifsource)
+    j <- !names(exifdat) %in% c("Directory", "FileName")
+    df <- cbind(df, exifdat[i,j])
   }
   df
 }
