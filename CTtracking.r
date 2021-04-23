@@ -331,6 +331,7 @@ read.digidat <- function(path, exifdat=NULL){
   csvfiles <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE, recursive=TRUE)
   if(length(csvfiles)==0) stop("No csv files found in path")
   df.list <- lapply(csvfiles, read.csv, stringsAsFactors=FALSE)
+  df.list <- lapply(df.list, dplyr::mutate_all, as.character)
   
   colnames <- lapply(df.list, names)
   n_columns <- unlist(lapply(colnames, length))
@@ -348,7 +349,8 @@ read.digidat <- function(path, exifdat=NULL){
               unlist(lapply(df.list, nrow)))
   df <- cbind(dir = pths,
               folder = basename(pths),
-              dplyr::bind_rows(df.list))
+              type.convert(dplyr::bind_rows(df.list), as.is=TRUE)
+  )
   
   if("height" %in% names(df))
     df$height <- as.numeric(df$height)
@@ -476,6 +478,7 @@ pairup <- function(dat, pairtag){
     dat <- subset(dat, !is.na(length))
   }
   dat$pair_id <- tidyr::unite(dat[, pairtag], "pr", sep="/")$pr
+  dat <- dat[order(dat$pair_id), ]
   
   duff2 <- duff3 <- duff4 <- FALSE
   tab <- table(dat$pair_id)
@@ -490,11 +493,11 @@ pairup <- function(dat, pairtag){
   dat <- pair(dat[!(dat$pair_id %in% names(which(duff2 | duff3)) | iduff1), ])
   
   if("hb" %in% names(dat)){ 
-    duff4 <- tab>1 & with(dat, hb>=ht) #base height >= top height
+    duff4 <- with(dat, hb>=ht) #base height >= top height
   }
 
-  if(any(duff1 | duff2 | duff3 | duff4)){
-    message("Warning:\n Some rows were discarded because...")
+  if(any(duff1 | duff2 | duff3) | any(duff4)){
+    message("Some rows were discarded because...")
     if(any(duff1)){
       message("...the pole had more than two points digitised:")
       cat(names(which(duff1)), sep="\n")
@@ -509,11 +512,12 @@ pairup <- function(dat, pairtag){
     }
     if(any(duff4)){
       message("...the pole base height was greater than or equal to top height:")
-      cat(names(which(duff4)), sep="\n")
+      cat(dat$pair_id[duff4], sep="\n")
     }
+    message("Warning:\n Some rows were discarded, see above for details")
   }
   
-  subset(dat, !pair_id %in% names(which(duff4)))
+  subset(dat, !duff4)
 }
 
 #CALIBRATION FUNCTIONS#############################################
