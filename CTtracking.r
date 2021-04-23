@@ -361,13 +361,14 @@ read.digidat <- function(path, exifdat=NULL){
   
   if(!is.null(exifdat)){
     if(!all(c("Directory", "FileName") %in% names(exifdat)))
-      stop("exifdat must contain at least columns Directory and file for matching")
+      stop("exifdat must contain at least columns Directory and FileName for matching")
     dfsource <- file.path(df$dir, df$image_name)
     exifsource <- file.path(exifdat$Directory, exifdat$FileName)
     miss <- !dfsource %in% exifsource
     if(sum(miss)>0){
       cat(dfsource[miss], sep="\n")
-      stop(paste(sum(miss), "out of", nrow(df), "digitised images not found in exifdat (named above)"))
+      warning(paste(sum(miss), "out of", nrow(df), "digitised images not found in exifdat (named above)"))
+      df <- subset(df, !miss)
     }
     df <- cbind(df, exifdat[match(dfsource, exifsource), !names(exifdat) %in% c("Directory", "FileName")])
   }
@@ -675,7 +676,7 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
         if(!idtag %in% names(lookup))
           stop("idtag column must be present in lookup as well as dat")
         if(!all(dat[,idtag] %in% lookup[,idtag]))
-          stop("Can't find all dat$idtag values in lookup$idtag")
+          stop(paste0("Can't find all dat$", idtag, " values in lookup$", idtag))
         if(!all(lookup$camera %in% names(cmods)))
           stop("Can't find all lookup$camera values in names(cmods)")
         camid <- lookup$camera[match(dat[,idtag], lookup[,idtag])]
