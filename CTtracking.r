@@ -1026,6 +1026,7 @@ seq.data <- function(dat){
 # dat: dataframe of position and time data grouped by sequence (see details)
 # datetimetag: the name of a field in dat containing text date/time of images
 # tformat: the format of the date/time records
+# nframes: number of frames per sequence below which time taken is inferred (see details)
 
 #OUTPUT
 #A dataframes containing original data for only sequences with two or more images,
@@ -1043,11 +1044,13 @@ seq.data <- function(dat){
 #  sequence_id: sequence identifiers
 #  a column of character date time data with name matching the datetimetag argument
 #
-#For sequences with more than 10 images, time is taken directly from timediff.
+#For sequences with more than nframes images, time is taken directly from timediff.
 #For shorter sequences, time is calculated as the number of image transitions
-#(frames-1) times the average transition time for those shorter sequences.
+#(frames-1) times the average transition time for those shorter sequences. Defaults
+#to using timediff for all.
 
-seq.summary <- function(dat, datetimetag="DateTimeOriginal", tformat="%Y:%m:%d %H:%M:%S"){
+seq.summary <- function(dat, datetimetag="DateTimeOriginal", tformat="%Y:%m:%d %H:%M:%S",
+                        nframes=0){
   calc.mov <- function(dat){
     n <- as.numeric(table(dat$sequence_id))
     dat <- seq.data(dat)
@@ -1055,7 +1058,7 @@ seq.summary <- function(dat, datetimetag="DateTimeOriginal", tformat="%Y:%m:%d %
     mvdist <- with(dat, tapply(displacement, sequence_id, sum, na.rm=T) )
     tm <- as.POSIXct(dat[,datetimetag], format=tformat, tz="UTC")
     mvtime <- tapply(tm, dat$sequence_id, function(x) as.numeric(diff(range(x)), units="secs"))
-    i <- n<11
+    i <- n<=nframes
     mntime <- sum(mvtime[i]) / (sum(n[i]) - sum(i))
     time <- mvtime
     time[i] <- mntime * (n[i]-1)
