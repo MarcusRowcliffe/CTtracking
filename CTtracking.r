@@ -681,11 +681,11 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
           stop(paste0("Can't find all dat$", idtag, " values in lookup$", idtag))
         if(!all(lookup$camera %in% names(cmods)))
           stop("Can't find all lookup$camera values in names(cmods)")
-        camid <- lookup$camera[match(dat[,idtag], lookup[,idtag])]
+        dat$cam_model <- lookup$camera[match(dat[,idtag], lookup[,idtag])]
       }
 
-    cams <- unique(camid)
-    res <- lapply(cams, function(cam) calc(subset(dat, camid==cam), cmods[[cam]]))
+    cams <- unique(dat$cam_model)
+    res <- lapply(cams, function(cam) calc(subset(dat, cam_model==cam), cmods[[cam]]))
     res <- dplyr::bind_rows(res)
     res[order(res$rowid), -which(names(res)=="rowid")]
   }
