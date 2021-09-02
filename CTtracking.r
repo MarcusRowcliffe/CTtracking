@@ -16,7 +16,7 @@
 #(or just convert to character silently)
 
 
-require(magick)
+require(jpeg)
 require(tidyr)
 
 camcal <- setClass("camcal", representation("list"))
@@ -480,7 +480,7 @@ pairup <- function(dat, pairtag){
     dat$length <- suppressWarnings(as.numeric(as.character(dat$length)))
     dat <- subset(dat, !is.na(length))
   }
-  dat$pair_id <- tidyr::unite(dat[, pairtag], "pr", sep="/")$pr
+  dat$pair_id <- tidyr::unite(select(camdat, pairtag), "pr", sep="/")$pr
   dat <- dat[order(dat$pair_id), ]
   
   duff2 <- duff3 <- duff4 <- FALSE
@@ -892,7 +892,7 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
   type <- match.arg(type)
   for(i in 1:nrow(dat)){
     imgpath <- file.path(dir, dat$image_name[i])
-    img <- readJPEG(imgpath, native=T)
+    img <- jpeg::readJPEG(imgpath, native=T)
     imdim <- dim(img)
     title <- dat$image_name[i]
     if(type=="pole") title <- paste0(title, " (", paste(dat[i, c("hb", "ht")], collapse=" / "), " m)")
