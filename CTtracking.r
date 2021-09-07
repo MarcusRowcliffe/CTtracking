@@ -170,7 +170,9 @@ read.exif <- function(path,
   if(!is.null(tagfield)){
     if(tagfield %in% names(dfout)){
       utags <- split.tags(dfout[,tagfield], ...)
-      dfout <- cbind(dplyr::select(dfout, -any_of(tagfield)), utags)
+      if(nrow(utags)!=nrow(dfout))
+        dfout <- utags else
+          dfout <- cbind(dplyr::select(dfout, -any_of(tagfield)), utags)
     }
   }
   
@@ -286,8 +288,11 @@ image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TR
 split.tags <- function(dat, tagsep=", ", valsep="|"){
   tagmatches <- unlist(lapply(gregexpr(tagsep, dat), function(x) sum(x>0)))
   valmatches <- unlist(lapply(gregexpr(paste0("\\", valsep), dat), function(x) sum(x>0)))
-  if(!all((valmatches-tagmatches)==1, na.rm=TRUE)) 
-    stop("There's a problem with the use of separators in dat")
+  i <- which((valmatches-tagmatches)!=1)
+  if(length(i)>0){ 
+    message("Error: There's a problem with the use of separators in dat - check output data")
+    return(data.frame(Record=i, ProblemData=dat[i]))
+  }
   
   lst <- strsplit(dat, tagsep)
   lst[unlist(lapply(lst, function(x) any(is.na(x))))] <- paste0("NA",valsep,"NA")
@@ -301,7 +306,7 @@ split.tags <- function(dat, tagsep=", ", valsep="|"){
     tidyr::pivot_wider(rowid, names_from=V1, values_from=V2) %>%
     as.data.frame() %>% 
     utils::type.convert(as.is=TRUE)
-  widedf[, !names(widedf) %in% c("rowid", "NA")]
+  dplyr::select(widedf, -any_of(c("NA", "rowid")))
 }
 
 
