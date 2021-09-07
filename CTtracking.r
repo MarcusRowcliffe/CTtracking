@@ -16,7 +16,7 @@
 #(or just convert to character silently)
 
 
-require(magick)
+require(jpeg)
 require(tidyr)
 
 camcal <- setClass("camcal", representation("list"))
@@ -170,7 +170,9 @@ read.exif <- function(path,
   if(!is.null(tagfield)){
     if(tagfield %in% names(dfout)){
       utags <- split.tags(dfout[,tagfield], ...)
-      dfout <- cbind(dplyr::select(dfout, -any_of(tagfield)), utags)
+      if(nrow(utags)!=nrow(dfout))
+        dfout <- utags else
+          dfout <- cbind(dplyr::select(dfout, -any_of(tagfield)), utags)
     }
   }
   
@@ -286,8 +288,11 @@ image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TR
 split.tags <- function(dat, tagsep=", ", valsep="|"){
   tagmatches <- unlist(lapply(gregexpr(tagsep, dat), function(x) sum(x>0)))
   valmatches <- unlist(lapply(gregexpr(paste0("\\", valsep), dat), function(x) sum(x>0)))
-  if(!all((valmatches-tagmatches)==1, na.rm=TRUE)) 
-    stop("There's a problem with the use of separators in dat")
+  i <- which((valmatches-tagmatches)!=1)
+  if(length(i)>0){ 
+    message("Error: There's a problem with the use of separators in dat - check output data")
+    return(data.frame(Record=i, ProblemData=dat[i]))
+  }
   
   lst <- strsplit(dat, tagsep)
   lst[unlist(lapply(lst, function(x) any(is.na(x))))] <- paste0("NA",valsep,"NA")
@@ -301,7 +306,7 @@ split.tags <- function(dat, tagsep=", ", valsep="|"){
     tidyr::pivot_wider(rowid, names_from=V1, values_from=V2) %>%
     as.data.frame() %>% 
     utils::type.convert(as.is=TRUE)
-  widedf[, !names(widedf) %in% c("rowid", "NA")]
+  dplyr::select(widedf, -any_of(c("NA", "rowid")))
 }
 
 
@@ -331,6 +336,7 @@ read.digidat <- function(path, exifdat=NULL){
   csvfiles <- list.files(path, pattern=".csv", full.names=TRUE, ignore.case=TRUE, recursive=TRUE)
   if(length(csvfiles)==0) stop("No csv files found in path")
   df.list <- lapply(csvfiles, read.csv, stringsAsFactors=FALSE)
+  df.list <- lapply(df.list, dplyr::mutate_all, as.character)
   
   colnames <- lapply(df.list, names)
   n_columns <- unlist(lapply(colnames, length))
@@ -348,7 +354,8 @@ read.digidat <- function(path, exifdat=NULL){
               unlist(lapply(df.list, nrow)))
   df <- cbind(dir = pths,
               folder = basename(pths),
-              dplyr::bind_rows(df.list))
+              type.convert(dplyr::bind_rows(df.list), as.is=TRUE)
+  )
   
   if("height" %in% names(df))
     df$height <- as.numeric(df$height)
@@ -359,15 +366,18 @@ read.digidat <- function(path, exifdat=NULL){
   
   if(!is.null(exifdat)){
     if(!all(c("Directory", "FileName") %in% names(exifdat)))
-      stop("exifdat must contain at least columns Directory and file for matching")
+      stop("exifdat must contain at least columns Directory and FileName for matching")
     dfsource <- file.path(df$dir, df$image_name)
     exifsource <- file.path(exifdat$Directory, exifdat$FileName)
     miss <- !dfsource %in% exifsource
     if(sum(miss)>0){
       cat(dfsource[miss], sep="\n")
-      stop(paste(sum(miss), "out of", nrow(df), "digitised images not found in exifdat (named above)"))
+      warning(paste(sum(miss), "out of", nrow(df), "digitised images not found in exifdat (named above) and were discarded"))
+      df <- subset(df, !miss)
     }
-    df <- cbind(df, exifdat[match(dfsource, exifsource), !names(exifdat) %in% c("Directory", "FileName")])
+    i <- match(file.path(df$dir, df$image_name), exifsource)
+    j <- !names(exifdat) %in% c("Directory", "FileName")
+    df <- cbind(df, exifdat[i,j])
   }
   df
 }
@@ -475,7 +485,8 @@ pairup <- function(dat, pairtag){
     dat$length <- suppressWarnings(as.numeric(as.character(dat$length)))
     dat <- subset(dat, !is.na(length))
   }
-  dat$pair_id <- tidyr::unite(dat[, pairtag], "pr", sep="/")$pr
+  dat$pair_id <- tidyr::unite(select(camdat, pairtag), "pr", sep="/")$pr
+  dat <- dat[order(dat$pair_id), ]
   
   duff2 <- duff3 <- duff4 <- FALSE
   tab <- table(dat$pair_id)
@@ -490,11 +501,11 @@ pairup <- function(dat, pairtag){
   dat <- pair(dat[!(dat$pair_id %in% names(which(duff2 | duff3)) | iduff1), ])
   
   if("hb" %in% names(dat)){ 
-    duff4 <- tab>1 & with(dat, hb>=ht) #base height >= top height
+    duff4 <- with(dat, hb>=ht) #base height >= top height
   }
 
-  if(any(duff1 | duff2 | duff3 | duff4)){
-    message("Warning:\n Some rows were discarded because...")
+  if(any(duff1 | duff2 | duff3) | any(duff4)){
+    message("Some rows were discarded because...")
     if(any(duff1)){
       message("...the pole had more than two points digitised:")
       cat(names(which(duff1)), sep="\n")
@@ -509,11 +520,12 @@ pairup <- function(dat, pairtag){
     }
     if(any(duff4)){
       message("...the pole base height was greater than or equal to top height:")
-      cat(names(which(duff4)), sep="\n")
+      cat(dat$pair_id[duff4], sep="\n")
     }
+    message("Warning:\n Some rows were discarded, see above for details")
   }
   
-  subset(dat, !pair_id %in% names(which(duff4)))
+  subset(dat, !duff4)
 }
 
 #CALIBRATION FUNCTIONS#############################################
@@ -671,14 +683,14 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
         if(!idtag %in% names(lookup))
           stop("idtag column must be present in lookup as well as dat")
         if(!all(dat[,idtag] %in% lookup[,idtag]))
-          stop("Can't find all dat$idtag values in lookup$idtag")
+          stop(paste0("Can't find all dat$", idtag, " values in lookup$", idtag))
         if(!all(lookup$camera %in% names(cmods)))
           stop("Can't find all lookup$camera values in names(cmods)")
-        camid <- lookup$camera[match(dat[,idtag], lookup[,idtag])]
+        dat$cam_model <- lookup$camera[match(dat[,idtag], lookup[,idtag])]
       }
 
-    cams <- unique(camid)
-    res <- lapply(cams, function(cam) calc(subset(dat, camid==cam), cmods[[cam]]))
+    cams <- unique(dat$cam_model)
+    res <- lapply(cams, function(cam) calc(subset(dat, cam_model==cam), cmods[[cam]]))
     res <- dplyr::bind_rows(res)
     res[order(res$rowid), -which(names(res)=="rowid")]
   }
@@ -885,7 +897,7 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
   type <- match.arg(type)
   for(i in 1:nrow(dat)){
     imgpath <- file.path(dir, dat$image_name[i])
-    img <- readJPEG(imgpath, native=T)
+    img <- jpeg::readJPEG(imgpath, native=T)
     imdim <- dim(img)
     title <- dat$image_name[i]
     if(type=="pole") title <- paste0(title, " (", paste(dat[i, c("hb", "ht")], collapse=" / "), " m)")
@@ -1019,6 +1031,7 @@ seq.data <- function(dat){
 # dat: dataframe of position and time data grouped by sequence (see details)
 # datetimetag: the name of a field in dat containing text date/time of images
 # tformat: the format of the date/time records
+# nframes: number of frames per sequence below which time taken is inferred (see details)
 
 #OUTPUT
 #A dataframes containing original data for only sequences with two or more images,
@@ -1036,11 +1049,13 @@ seq.data <- function(dat){
 #  sequence_id: sequence identifiers
 #  a column of character date time data with name matching the datetimetag argument
 #
-#For sequences with more than 10 images, time is taken directly from timediff.
+#For sequences with more than nframes images, time is taken directly from timediff.
 #For shorter sequences, time is calculated as the number of image transitions
-#(frames-1) times the average transition time for those shorter sequences.
+#(frames-1) times the average transition time for those shorter sequences. Defaults
+#to using timediff for all.
 
-seq.summary <- function(dat, datetimetag="DateTimeOriginal", tformat="%Y:%m:%d %H:%M:%S"){
+seq.summary <- function(dat, datetimetag="DateTimeOriginal", tformat="%Y:%m:%d %H:%M:%S",
+                        nframes=0){
   calc.mov <- function(dat){
     n <- as.numeric(table(dat$sequence_id))
     dat <- seq.data(dat)
@@ -1048,7 +1063,7 @@ seq.summary <- function(dat, datetimetag="DateTimeOriginal", tformat="%Y:%m:%d %
     mvdist <- with(dat, tapply(displacement, sequence_id, sum, na.rm=T) )
     tm <- as.POSIXct(dat[,datetimetag], format=tformat, tz="UTC")
     mvtime <- tapply(tm, dat$sequence_id, function(x) as.numeric(diff(range(x)), units="secs"))
-    i <- n<11
+    i <- n<=nframes
     mntime <- sum(mvtime[i]) / (sum(n[i]) - sum(i))
     time <- mvtime
     time[i] <- mntime * (n[i]-1)
