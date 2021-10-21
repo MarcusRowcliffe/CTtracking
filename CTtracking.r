@@ -17,7 +17,7 @@
 
 
 require(jpeg)
-require(tidyr)
+require(tidyverse)
 
 camcal <- setClass("camcal", representation("list"))
 depcal <- setClass("depcal", representation("list"))
@@ -485,7 +485,7 @@ pairup <- function(dat, pairtag){
     dat$length <- suppressWarnings(as.numeric(as.character(dat$length)))
     dat <- subset(dat, !is.na(length))
   }
-  dat$pair_id <- tidyr::unite(select(camdat, pairtag), "pr", sep="/")$pr
+  dat$pair_id <- tidyr::unite(dplyr::select(dat, all_of(pairtag)), "pr", sep="/")$pr
   dat <- dat[order(dat$pair_id), ]
   
   duff2 <- duff3 <- duff4 <- FALSE
