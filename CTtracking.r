@@ -1,23 +1,3 @@
-#V0.2
-
-#NOTES ON PREPARING FILES####
-
-#Before digitising, ensure that images are organised into placement_specific folders, 
-#named with placement identifiers. Subfolders are allowed. Images must currently have 
-#names that are unique across the whole dataset.
-
-#Organise digitisation csv files by type - camera calibration (if used), site calibration
-#and animal, with one folder per type. Name csv files with placement (or camera) identifiers
-#that are consistent across types.
-
-#When digitising with multiple fields in the sequence_annotation box, use a semicolon separator
-#e.g. for a point digitised 0.5 m up a pole at 6 m from the camera, use annotation 0.5;6.
-
-#If reading metadata from a previously prepared csv file, set stringsAsFactors=FALSE.
-#ISSUE? fail if time used but in factor format, with mesasge suggesting above solution 
-#(or just convert to character silently)
-
-
 require(magick)
 require(tidyr)
 
