@@ -773,21 +773,23 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
             }
         }
 
-  if(is.null(cmods)) cmod <- cal.cam(dat) else
-    if(length(cmods)==1) cmod <- cmods[[1]]
-    
-  if(is.null(deptag))
-    res <- list(cal(dat, NULL, cmod)) else{
-      deps <- unique(dat[,deptag])
-      res <- lapply(deps, function(d){
-        if(length(cmods)>1){
-          cam <- lookup$camera[lookup[,deptag]==d]
-          cmod <- cmods[[cam]]
-        }
-        cal(dat[dat[,deptag]==d, ], d, cmod)
-      })
-      names(res) <- deps
-    }
+  if(length(cmods)==1) cmod <- cmods[[1]]
+  if(is.null(deptag)){
+    if(is.null(cmods)) cmod <- cal.cam(dat)[[1]]
+    res <- list(cal(dat, NULL, cmod))
+  } else{
+    deps <- unique(dat[,deptag])
+    res <- lapply(deps, function(d){
+      subdat <- dat[dat[,deptag]==d, ]
+      if(is.null(cmods)) cmod <- cal.cam(subdat)[[1]] else
+      if(length(cmods)>1){
+        cam <- lookup$camera[lookup[,deptag]==d]
+        cmod <- cmods[[cam]]
+      }
+      cal(subdat, d, cmod)
+    })
+    names(res) <- deps
+  }
   
   nofits <- unlist(lapply(res, function(m) is.null(m$model)))
   if(any(nofits)){
