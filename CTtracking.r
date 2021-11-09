@@ -735,7 +735,7 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
       
       dat$rely <- dat$yg/dim$y
       dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
-      repeat{
+      for(i in 1:20){
         b1.start <- runif(1,0,max(dat$distance))
         if(flex)
           mod <- try(nls(distance~b1/(rely^b4-(b2+b3*relx)), data=dat, algorithm="port", 
