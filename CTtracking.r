@@ -86,7 +86,9 @@ peep.exif <- function(path, file.index=1, toolpath=NULL){
 # ...: additional arguments passed to split.tags
 
 #OUTPUT
-#A dataframe of image metadata. 
+#A dataframe of image metadata, unless tagfield is specified and split.tags throws
+#up problems, in which case a dataframe is returned of the records identified as 
+#problematic by split.tags.
 
 #DETAILS
 #Runs command line executable exiftool, which must be present locally (see 
@@ -110,6 +112,7 @@ peep.exif <- function(path, file.index=1, toolpath=NULL){
 #in a folder named exiftool within the current R library, where the 
 #install.exiftool function places it.
 
+
 read.exif <- function(path, 
                       fields=c("Directory", "FileName", "DateTimeOriginal", "ImageWidth", "ImageHeight"), 
                       tagfield=NULL, toolpath=NULL, ...){
@@ -128,7 +131,7 @@ read.exif <- function(path,
       if(!tagfield %in% fields) fields <- c(fields, tagfield)
     ff <- paste(paste0("-", fields), collapse=" ")
   }
-
+  
   cmd <- paste("exiftool -ext jpg -r -t -s", ff, paste0('"', path, '"'))
   wd <- getwd()
   setwd(toolpath)
@@ -155,6 +158,9 @@ read.exif <- function(path,
   if(!is.null(tagfield)){
     if(tagfield %in% names(dfout)){
       utags <- split.tags(dfout[,tagfield], ...)
+      if(class(utags)=="integer"){
+        return(dfout[utags, ])
+      }
       if(nrow(utags)!=nrow(dfout))
         dfout <- utags else
           dfout <- cbind(dplyr::select(dfout, -any_of(tagfield)), utags)
@@ -263,7 +269,8 @@ image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TR
 #OUTPUT
 #A data frame with a row per record in dat, and a column for each field name 
 #found in dat. Where a field name is not given for a record, a missing value
-#is assigned.
+#is assigned. If problematic records are found, no attempt is made to split tags, 
+#and a vector of problematic record numbers is returned.
 
 #DETAILS
 #The default values for tagsep (", ") and valsep ("|") work for default 
@@ -271,13 +278,21 @@ image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TR
 #in dat must be strings taking the form: "Field1|value1, Field2|value2".
 
 split.tags <- function(dat, tagsep=", ", valsep="|"){
+  ### Error check
+  if(is.null(dat) | !class(dat)=="character")
+    stop("Input must be a non-null character vector")
+  ###
+  
+  ### Error check
   tagmatches <- unlist(lapply(gregexpr(tagsep, dat), function(x) sum(x>0)))
   valmatches <- unlist(lapply(gregexpr(paste0("\\", valsep), dat), function(x) sum(x>0)))
   i <- which((valmatches-tagmatches)!=1)
-  if(length(i)>0){ 
-    message("Error: There's a problem with the use of separators in dat - check output data")
-    return(data.frame(Record=i, ProblemData=dat[i]))
+  if(length(i)>0){
+    message("Error: There is a problem with the use of separators.
+            Check the output for problematic records.")
+    return(i)
   }
+  ###
   
   lst <- strsplit(dat, tagsep)
   lst[unlist(lapply(lst, function(x) any(is.na(x))))] <- paste0("NA",valsep,"NA")
@@ -287,6 +302,17 @@ split.tags <- function(dat, tagsep=", ", valsep="|"){
     matrix(ncol=2, byrow=TRUE) %>% 
     as.data.frame()
   longdf$rowid <- rep(1:length(dat), unlist(lapply(lst, length)))
+  
+  ### Error check
+  tab <- table(longdf$V1, longdf$rowid)
+  i <- which(apply(tab, 2, function(x) any(x>1)))
+  if(length(i)>0){
+    message("Error: There must be only one value per tag field.
+            Check the output for problematic records.")
+    return(i)
+  }
+  ###
+  
   widedf <- longdf %>% 
     tidyr::pivot_wider(rowid, names_from=V1, values_from=V2) %>%
     as.data.frame() %>% 
