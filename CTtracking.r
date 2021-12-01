@@ -760,22 +760,17 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
       names(dim) <- c("x","y")
       
       dat$rely <- dat$yg/dim$y
-      dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
+      dat$relx <- dat$xg/dim$x - 0.5
       for(i in 1:20){
-        b1.start <- runif(1,0,max(dat$distance))
         if(flex)
-          mod <- try(nls(distance~b1/(rely^b4-(b2+b3*relx)), data=dat, algorithm="port", 
-                       start=list(b1=b1.start, b2=min(dat$rely)*0.9, b3=0, b4=1),
-                       lower=c(b1=0,b2=0,b3=-Inf,b4=0), 
-                       upper=c(b1=Inf,b2=min(dat$rely),b3=Inf,b4=Inf),
-                       trace=F )) else
-          mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
-                       start=list(b1=b1.start, b2=min(dat$rely)*0.9, b3=0),
-                       lower=c(b1=0,b2=0,b3=-Inf), 
-                       upper=c(b1=Inf,b2=min(dat$rely),b3=Inf),
+          mod <- try(nls(rely ~ (b3 + b4*relx + (b1 + b2*relx)/distance)^b5, data=dat, 
+                       start=list(b1=1, b2=0, b3=0.5, b4=0, b5=1),
                        trace=F ))
           if(class(mod)=="nls") break
       }
+      if(class(mod)=="nls") 
+        mod <- list(formula=mod$call$formula, coefs=coef(mod)) else
+          mod <- NULL
       res <- list(cam.model=cmod, model=mod, data=dat, dim=dim, id=id)
     }
     depcal(res)
@@ -856,13 +851,11 @@ plot.depcal <- function(mod){
                    xlab="Relative y pixel position", ylab="Distance from camera",
                    main=dep, 
                    sub="Shading from image left (dark) to right edge", cex.sub=0.7))
-    if(class(mod$model)=="nls"){
-      sq <- seq(0, mxx, len=100)
-      lines(sq, predict.r(mod$model, -0.5, sq), col=colrange[1])
-      lines(sq, predict.r(mod$model, 0, sq), col=colrange[6])
-      lines(sq, predict.r(mod$model, 0.5, sq), col=colrange[11])
-    }
-    
+    sq <- seq(0, mxx, len=100)
+    lines(sq, predict.r(mod$model, -0.5, sq), col=colrange[1])
+    lines(sq, predict.r(mod$model, 0, sq), col=colrange[6])
+    lines(sq, predict.r(mod$model, 0.5, sq), col=colrange[11])
+
     #PLOT POLE IMAGE
     relht <- with(dat, (1-ht) / (ht-hb))
     plot(c(0, dim$ImageWidth), -c(0, dim$ImageHeight), 
@@ -941,7 +934,8 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
 #Note, units depend on the units of pole height above ground used to calibrate the site model
 
 predict.r <- function(mod, relx, rely){
-  res <- predict(mod, newdata=data.frame(relx=relx, rely=rely))
+  cfs <- mod$coefs
+  res <- (cfs[1] + cfs[2]*relx) / (rely^(1/cfs[5]) - cfs[3] - cfs[4]*relx)
   res[res<0] <- Inf
   res
 }
