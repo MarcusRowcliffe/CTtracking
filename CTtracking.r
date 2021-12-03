@@ -776,6 +776,9 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
                        trace=F ))
           if(class(mod)=="nls") break
       }
+      if(class(mod)=="nls") 
+        mod <- list(formula=mod$call$formula, coefs=coef(mod)) else
+          mod <- NULL
       res <- list(cam.model=cmod, model=mod, data=dat, dim=dim, id=id)
     }
     depcal(res)
@@ -856,7 +859,7 @@ plot.depcal <- function(mod){
                    xlab="Relative y pixel position", ylab="Distance from camera",
                    main=dep, 
                    sub="Shading from image left (dark) to right edge", cex.sub=0.7))
-    if(class(mod$model)=="nls"){
+    if(!is.null(mod$model)){
       sq <- seq(0, mxx, len=100)
       lines(sq, predict.r(mod$model, -0.5, sq), col=colrange[1])
       lines(sq, predict.r(mod$model, 0, sq), col=colrange[6])
@@ -941,7 +944,10 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
 #Note, units depend on the units of pole height above ground used to calibrate the site model
 
 predict.r <- function(mod, relx, rely){
-  res <- predict(mod, newdata=data.frame(relx=relx, rely=rely))
+  f <- mod$formula
+  cfs <- coef(m)
+  vals <- c(list(relx=relx, rely=rely), mod$coef)
+  res <- eval(f[[3]], vals)
   res[res<0] <- Inf
   res
 }
