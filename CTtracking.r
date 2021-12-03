@@ -776,6 +776,9 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
                        trace=F ))
           if(class(mod)=="nls") break
       }
+      if(class(mod)=="nls") 
+        mod <- list(formula=mod$call$formula, coefs=coef(mod)) else
+          mod <- NULL
       res <- list(cam.model=cmod, model=mod, data=dat, dim=dim, id=id)
     }
     depcal(res)
@@ -941,7 +944,10 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
 #Note, units depend on the units of pole height above ground used to calibrate the site model
 
 predict.r <- function(mod, relx, rely){
-  res <- predict(mod, newdata=data.frame(relx=relx, rely=rely))
+  f <- mod$formula
+  cfs <- coef(m)
+  vals <- c(list(relx=relx, rely=rely), mod$coef)
+  res <- eval(f[[3]], vals)
   res[res<0] <- Inf
   res
 }
