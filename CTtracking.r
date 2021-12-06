@@ -848,7 +848,9 @@ plot_deployment_image <- function(mod, i=1, dists=c(1,2,5,10,20)){
   imdim <- dim(img)
   xsq <- seq(1, imdim[2], len=20)
   xd <- expand.grid(xsq, dists)
-  yy <- imdim[1] * (1 - (cfs[1]/xd[,2] + cfs[2] + cfs[3]*xd[,1]/imdim[2])^(1/cfs[4]))
+  f <- formula(rely ~ (b1/dist + b2+ b3*relx)^(1/b4))[[3]]
+  vals <- c(list(relx=xd[,1], dist=xd[,2]), cfs)
+  yy <- 1 - eval(f, vals)
   yy <- matrix(yy, ncol=length(dists))
   p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
     xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
@@ -861,7 +863,6 @@ plot_deployment_image <- function(mod, i=1, dists=c(1,2,5,10,20)){
     geom_text(aes(x,y,label=d), data.frame(x=-20, y=yy[1,], d=dists), col="red")
   p
 }
-
 
 #plot.depcal#
 
@@ -978,10 +979,9 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
 #Note, units depend on the units of pole height above ground used to calibrate the site model
 
 predict.r <- function(mod, relx, rely){
-  f <- mod$formula
-  cfs <- coef(m)
-  vals <- c(list(relx=relx, rely=rely), mod$coef)
-  res <- eval(f[[3]], vals)
+  f <- mod$formula[[3]]
+  vals <- c(list(relx=relx, rely=rely), mod$coefs)
+  res <- eval(f, vals)
   res[res<0] <- Inf
   res
 }
