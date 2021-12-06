@@ -1,6 +1,4 @@
 require(magick)
-require(tidyr)
-
 require(jpeg)
 require(tidyverse)
 
@@ -820,8 +818,7 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3){
 # Plot deployment image with overplotted pole base distances and model distance contours
 
 #INPUT
-# dat: dataframe from from deployment calibration data component
-# cfs: model coeficients from deployment calibration $model$coefs component
+# mod: a depcal object
 # i: integer indicating which image from dat to show
 
 plot_deployment_image <- function(mod, i=1, dists=c(1,2,5,10,20)){
@@ -830,12 +827,10 @@ plot_deployment_image <- function(mod, i=1, dists=c(1,2,5,10,20)){
   imgpath <- with(dat[i,], file.path(dir, image_name))
   img <- jpeg::readJPEG(imgpath, native=T)
   imdim <- dim(img)
-  xsq <- seq(1, imdim[2], len=20)
-  xd <- expand.grid(xsq/imdim[2], dists)
-  f <- formula(rely ~ b3 + b4*relx + (b1 + b2*relx) / dist)[[3]]
-  vals <- c(list(relx=xd[,1], dist=xd[,2]), cfs)
-  yy <- imdim[1] * (1 - eval(f, vals))
-  yy <- matrix(yy, ncol=length(dists))
+  xsq <- seq(1, imdim[2], len=10)
+  xd <- expand.grid(xsq/imdim[2]-0.5, dists)
+  yy <- imdim[1] * (1 - predict.y(cfs, xd[,1], xd[,2])) %>%
+    matrix(ncol=length(dists))
   p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
     xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
     theme_void() + 
@@ -968,6 +963,12 @@ predict.r <- function(mod, relx, rely){
   res
 }
 
+predict.y <- function(coefs, relx, dist){
+  f <- formula(rely ~ b3 + b4*relx + (b1 + b2*relx) / dist)[[3]]
+  vals <- c(list(relx=relx, dist=dist), coefs)
+  eval(f, vals)
+}
+  
 #predict.pos#
 
 #Predicts position relative to camera given image pixel positions and site calibration models 
