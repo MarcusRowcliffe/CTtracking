@@ -821,9 +821,9 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3){
 # mod: a depcal object
 # i: integer indicating which image from dat to show
 
-plot_deployment_image <- function(mod, i=1, dists=c(1,2,5,10,20)){
+plot_deployment_image <- function(mod, cfs=NULL, i=1, dists=c(1,2,5,10,20)){
   dat <- mod$data
-  cfs <- mod$model$coefs
+  if(is.null(cfs)) cfs <- mod$model$coefs
   imgpath <- with(dat[i,], file.path(dir, image_name))
   img <- jpeg::readJPEG(imgpath, native=T)
   imdim <- dim(img)
