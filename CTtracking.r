@@ -760,7 +760,7 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3){
       for(i in 1:20){
         mod <- try(nls(distance ~ (b1 + b2*relx) / (rely - b3 - b4*relx),
                        data=dat, 
-                       start=list(b1=1, b2=0, b3=0.5, b4=0, b5=1),
+                       start=list(b1=1, b2=0, b3=0.5, b4=0),
                        trace=F ))
           if(class(mod)=="nls") break
       }
