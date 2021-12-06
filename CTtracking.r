@@ -763,21 +763,24 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
       dat$relx <- (dat$xb+dat$xt)/(2 * dim$x) - 0.5
       for(i in 1:20){
         b1.start <- runif(1,0,max(dat$distance))
-        if(flex)
-          mod <- try(nls(distance~b1/(rely^b4-(b2+b3*relx)), data=dat, algorithm="port", 
-                       start=list(b1=b1.start, b2=min(dat$rely)*0.9, b3=0, b4=1),
-                       lower=c(b1=0,b2=0,b3=-Inf,b4=0), 
-                       upper=c(b1=Inf,b2=min(dat$rely),b3=Inf,b4=Inf),
-                       trace=F )) else
-          mod <- try(nls(distance~b1/(rely-(b2+b3*relx)), data=dat, algorithm="port", 
-                       start=list(b1=b1.start, b2=min(dat$rely)*0.9, b3=0),
-                       lower=c(b1=0,b2=0,b3=-Inf), 
-                       upper=c(b1=Inf,b2=min(dat$rely),b3=Inf),
-                       trace=F ))
-          if(class(mod)=="nls") break
+        strt <- list(b1=b1.start, b2=min(dat$rely)*0.9, b3=0)
+        lwr=c(b1=0,b2=0,b3=-Inf) 
+        upr=c(b1=Inf,b2=min(dat$rely),b3=Inf)
+        if(flex){
+          strt <- c(strt, b4=1)
+          lwr=c(lwr, b4=0)
+          upr=c(upr, b4=Inf)
+        } else 
+          b4 <- 1
+        mod <- try(nls(distance~b1/(rely^b4-(b2+b3*relx)), data=dat, algorithm="port", 
+                       start=strt, lower=lwr, upper=upr, trace=F ))
+        if(class(mod)=="nls") break
       }
-      if(class(mod)=="nls") 
-        mod <- list(formula=mod$call$formula, coefs=coef(mod)) else
+      if(class(mod)=="nls"){
+        cfs <- coef(mod)
+        if(!flex) cfs <- c(cfs, b4=1)
+        mod <- list(formula=mod$call$formula, coefs=cfs)
+        } else
           mod <- NULL
       res <- list(cam.model=cmod, model=mod, data=dat, dim=dim, id=id)
     }
@@ -837,12 +840,13 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
 # cfs: model coeficients from deployment calibration $model$coefs component
 # i: integer indicating which image from dat to show
 
-plot_deployment_image <- function(dat, cfs, i){
+plot_deployment_image <- function(mod, i=1, dists=c(1,2,5,10,20)){
+  dat <- mod$data
+  cfs <- mod$model$coefs
   imgpath <- with(dat[i,], file.path(dir, image_name))
   img <- jpeg::readJPEG(imgpath, native=T)
   imdim <- dim(img)
   xsq <- seq(1, imdim[2], len=20)
-  dists <- c(1,2,5,10,20)
   xd <- expand.grid(xsq, dists)
   yy <- imdim[1] * (1 - (cfs[1]/xd[,2] + cfs[2] + cfs[3]*xd[,1]/imdim[2])^(1/cfs[4]))
   yy <- matrix(yy, ncol=length(dists))
