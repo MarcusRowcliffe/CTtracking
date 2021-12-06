@@ -831,10 +831,10 @@ plot_deployment_image <- function(mod, i=1, dists=c(1,2,5,10,20)){
   img <- jpeg::readJPEG(imgpath, native=T)
   imdim <- dim(img)
   xsq <- seq(1, imdim[2], len=20)
-  xd <- expand.grid(xsq, dists)
+  xd <- expand.grid(xsq/imdim[2], dists)
   f <- formula(rely ~ b3 + b4*relx + (b1 + b2*relx) / dist)[[3]]
   vals <- c(list(relx=xd[,1], dist=xd[,2]), cfs)
-  yy <- 1 - eval(f, vals)
+  yy <- imdim[1] * (1 - eval(f, vals))
   yy <- matrix(yy, ncol=length(dists))
   p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
     xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
