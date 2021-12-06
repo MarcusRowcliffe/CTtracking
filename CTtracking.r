@@ -717,7 +717,6 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
 # idtag: a string naming the column in dat used for matching in lookup
 # lookup: a table used to match camera models to deployments in dat
 # minpoles: threshold minimum number of poles needed to fit a model
-# flex: whether to include additional flexibility in the model (can be difficult to fit)
 
 #OUTPUT
 #A list object of class depcal (ie deployment calibration), describing 
@@ -739,16 +738,13 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
 #column named distance.
 
 #Distance (d) as a function of x and y pixel positions is modelled using non-linear
-#least squares (nls function) with equation either (for flex=FALSE):
-#   d ~ b1 / (y-(b2+b3*x))
-#or (for flex=TRUE):
-#   d ~ b1 / (y^b4-(b2+b3*x))
+#least squares (nls function) with equation:
+#   d ~ (b1 + b2*x) / (y - b3 - b4*x)
 
 #If the number of poles available for a deployment is less than or equal to 
 #minpoles, no model fitting is attempted and the output is NULL, with a warning.
 
-cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, 
-                     minpoles=3, flex=FALSE){
+cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3){
 
   cal <- function(dat, id=NULL, cmod=NULL){
     if(nrow(dat)<minpoles){
@@ -759,11 +755,11 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
         stop("There is more than one unique value per deployment for ImageWidth and/or ImageHeight in dat")
       names(dim) <- c("x","y")
       
-      dat$rely <- dat$yg/dim$y
-      dat$relx <- dat$xg/dim$x - 0.5
+#      dat$rely <- dat$yg/dim$y
+#      dat$relx <- dat$xg/dim$x - 0.5
       for(i in 1:20){
-        if(flex)
-          mod <- try(nls(rely ~ (b3 + b4*relx + (b1 + b2*relx)/distance)^b5, data=dat, 
+        mod <- try(nls(distance ~ (b1 + b2*relx) / (rely - b3 - b4*relx),
+                       data=dat, 
                        start=list(b1=1, b2=0, b3=0.5, b4=0, b5=1),
                        trace=F ))
           if(class(mod)=="nls") break
@@ -820,6 +816,38 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
   calibs(res)
 }
 
+#plot_deployment_image
+
+# Plot deployment image with overplotted pole base distances and model distance contours
+
+#INPUT
+# dat: dataframe from from deployment calibration data component
+# cfs: model coeficients from deployment calibration $model$coefs component
+# i: integer indicating which image from dat to show
+
+plot_deployment_image <- function(mod, i=1, dists=c(1,2,5,10,20)){
+  dat <- mod$data
+  cfs <- mod$model$coefs
+  imgpath <- with(dat[i,], file.path(dir, image_name))
+  img <- jpeg::readJPEG(imgpath, native=T)
+  imdim <- dim(img)
+  xsq <- seq(1, imdim[2], len=20)
+  xd <- expand.grid(xsq, dists)
+  f <- formula(rely ~ b3 + b4*relx + (b1 + b2*relx) / dist)[[3]]
+  vals <- c(list(relx=xd[,1], dist=xd[,2]), cfs)
+  yy <- 1 - eval(f, vals)
+  yy <- matrix(yy, ncol=length(dists))
+  p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
+    xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
+    theme_void() + 
+    coord_equal()
+  for(d in 1:length(dists))
+    p <- p + geom_line(aes(x, y), data.frame(x=xsq, y=yy[, d]), col="red")
+  p <- p + geom_label(aes(xg, imdim[1]-yg, label=round(distance,1)), dat, 
+                      size=3, label.padding=unit(0.1, "lines")) + 
+    geom_text(aes(x,y,label=d), data.frame(x=-20, y=yy[1,], d=dists), col="red")
+  p
+}
 
 #plot.depcal#
 
@@ -934,12 +962,12 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
 #Note, units depend on the units of pole height above ground used to calibrate the site model
 
 predict.r <- function(mod, relx, rely){
-  cfs <- mod$coefs
-  res <- (cfs[1] + cfs[2]*relx) / (rely^(1/cfs[5]) - cfs[3] - cfs[4]*relx)
+  f <- mod$formula[[3]]
+  vals <- c(list(relx=relx, rely=rely), mod$coefs)
+  res <- eval(f, vals)
   res[res<0] <- Inf
   res
 }
-
 
 #predict.pos#
 
