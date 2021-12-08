@@ -1,6 +1,6 @@
 require(magick)
 require(tidyr)
-require(ggplot2)
+
 require(jpeg)
 require(tidyverse)
 
@@ -826,36 +826,6 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL,
     cat(deps[nofits], sep="\n")
   }
   calibs(res)
-}
-
-#plot_deployment_image
-
-# Plot deployment image with overplotted pole base distances and model distance contours
-
-#INPUT
-# dat: dataframe from from deployment calibration data component
-# cfs: model coeficients from deployment calibration $model$coefs component
-# i: integer indicating which image from dat to show
-
-plot_deployment_image <- function(dat, cfs, i){
-  imgpath <- with(dat[i,], file.path(dir, image_name))
-  img <- jpeg::readJPEG(imgpath, native=T)
-  imdim <- dim(img)
-  xsq <- seq(1, imdim[2], len=20)
-  dists <- c(1,2,5,10,20)
-  xd <- expand.grid(xsq, dists)
-  yy <- imdim[1] * (1 - (cfs[1]/xd[,2] + cfs[2] + cfs[3]*xd[,1]/imdim[2])^(1/cfs[4]))
-  yy <- matrix(yy, ncol=length(dists))
-  p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
-    xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
-    theme_void() + 
-    coord_equal()
-  for(d in 1:length(dists))
-    p <- p + geom_line(aes(x, y), data.frame(x=xsq, y=yy[, d]), col="red")
-  p <- p + geom_label(aes(xg, imdim[1]-yg, label=round(distance,1)), dat, 
-                      size=3, label.padding=unit(0.1, "lines")) + 
-    geom_text(aes(x,y,label=d), data.frame(x=-20, y=yy[1,], d=dists), col="red")
-  p
 }
 
 
