@@ -1,10 +1,14 @@
 require(magick)
 require(jpeg)
 require(tidyverse)
+require(ggplot2)
 
 camcal <- setClass("camcal", representation("list"))
 depcal <- setClass("depcal", representation("list"))
 calibs <- setClass("calibs", representation("list"))
+
+dformula <- formula(distance ~ (b1 + b4*relx) / (rely^b5 - b2 + b3*relx))
+yformula <- formula(rely ~ ((b1 + b4*relx) / distance + b2 - b3*relx)^(1/b5))
 
 #GENERAL FUNCTIONS#############################################
 
@@ -600,22 +604,16 @@ cal.cam <- function(poledat, camtag=NULL){
   calibs(out)
 }
 
+#plot_camera_model
 
-#plot.camcal#
+# Plot camera model diagnostic length per pixel against distance
 
 #INPUT
-# mod: a camera calibration object of class camcal, created using cal.cam
+# mod: a camcal object
 
-#Generates two diagnostic plots for a camera calibration model:
-#1. Length per image pixel as a function of distance from camera and x pixel
-#   position within the image
-#2. A diagram of digitised pole sections as they appear in images.
-
-plot.camcal <- function(mod){
-  dat <- mod$data
+plot_camera_model <- function(mod){
   cols <- grey.colors(11, start=0, end=0.8)
-  
-  #PLOT POLE:PIXEL RATIO V DISTANCE RELATIONSHIP
+  dat <- mod$data
   x <- abs(dat$relx)
   i <- round(1 + (x-min(x))*10/diff(range(x)))
   with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=mod$id,
@@ -625,8 +623,18 @@ plot.camcal <- function(mod){
   dr <- range(dat$distance)
   lines(dr, dr/(FS[1]*mod$dim$y), col=cols[1])
   lines(dr, dr/(FS[2]*mod$dim$y), col=cols[11])
-  
-  #PLOT POLE IMAGE
+}
+
+#plot_camera_poles
+
+# Plot camera model diagnostic poles
+
+#INPUT
+# mod: a camcal object
+
+plot_camera_poles <- function(mod){
+  cols <- grey.colors(11, start=0, end=0.8)
+  dat <- mod$data
   d <- dat$distance
   i <- round(1 + (d-min(d))*10/diff(range(d)))
   plot(c(0,mod$dim$x), c(0,-mod$dim$y), type="n", asp=1, main=mod$id,
@@ -635,6 +643,25 @@ plot.camcal <- function(mod){
   for(p in 1:nrow(dat))
     lines(dat[p,c("xb","xt")], -dat[p,c("yb","yt")], type="l", lwd=2, col=cols[i[p]])
   lines(c(0,rep(c(mod$dim$x,0),each=2)), c(rep(c(0,-mod$dim$y),each=2),0), lty=2)
+  
+}
+
+#plot.camcal#
+
+#INPUT
+# mod: a camera calibration object of class camcal, created using cal.cam
+# type: the type of diagnostic to plot
+
+#Generates one of two diagnostic plots for a camera calibration model, depending on type:
+#1. model: Length per image pixel as a function of distance from camera and x pixel
+#   position within the image
+#2. poles: A diagram of digitised pole sections as they appear in images.
+
+plot.camcal <- function(mod, type=c("model", "poles")){
+  type <- match.arg(type)
+  switch(type,
+         model = plot_camera_model(mod),
+         poles = plot_camera_poles(mod))
 }
 
 
@@ -715,12 +742,14 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
 # idtag: a string naming the column in dat used for matching in lookup
 # lookup: a table used to match camera models to deployments in dat
 # minpoles: threshold minimum number of poles needed to fit a model
+# fix: a vector of integers indexing parameters to fix
+# response: model response variable either distance or ypixel
 
 #OUTPUT
 #A list object of class depcal (ie deployment calibration), describing 
 #relationship between pixel position and distance, with elements:
 # cam.model: the camera calibration model used to predict distances (if any)
-# model: non-linear least squares (nls) fit of distance as a function of pixel position (see details)
+# model: list containing fitted model formula (formula) and model coefficients (coefs)
 # data: the data input to the model
 # dim: the x,y pixel dimensions of the images used for calibration
 # id: the name of the deployment
@@ -735,14 +764,17 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
 #predicted using these models. If not, dat must also contain distance data in a 
 #column named distance.
 
-#Distance (d) as a function of x and y pixel positions is modelled using non-linear
-#least squares (nls function) with equation:
-#   d ~ (b1 + b2*x) / (y - b3 - b4*x)
+#Distance (d), relx (x) and rely (y) pixel positions are modelled with either distance or
+#y pixel as response using respective non-linear functions:
+#   d ~ (b1 + b4*x) / (y^5 - b2 + b3*x)
+#   y ~ (b1 + b4*x) / d + b2 - b3*x
 
 #If the number of poles available for a deployment is less than or equal to 
 #minpoles, no model fitting is attempted and the output is NULL, with a warning.
-
-cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3){
+cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3,
+                    fix=c(4,5), response=c("distance", "ypixel")){
+  response <- match.arg(response)
+  if(!all(fix %in% 3:5)) stop("Fix must contain only integers between 3 and 5")
 
   cal <- function(dat, id=NULL, cmod=NULL){
     if(nrow(dat)<minpoles){
@@ -755,15 +787,37 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3){
       
       dat$rely <- dat$yg/dim$y
       dat$relx <- dat$xg/dim$x - 0.5
-      for(i in 1:20){
-        mod <- try(nls(distance ~ (b1 + b2*relx) / (rely - b3 - b4*relx),
-                       data=dat, trace=F,
-                       start=list(b1=1, b2=0, b3=0, b4=0)))
-          if(class(mod)=="nls") break
+      start <- list(b1=1, b2=0, b3=0, b4=0, b5=1)
+      if(3 %in% fix){
+        dat$b3=0
+        start <- start[names(start)!="b3"]
       }
-      if(class(mod)=="nls") 
-        mod <- list(formula=mod$call$formula, coefs=coef(mod)) else
-          mod <- NULL
+      if(4 %in% fix){
+        dat$b4 <- 0
+        start <- start[names(start)!="b4"]
+      }
+      if(5 %in% fix){
+        dat$b5 <- 1
+        start <- start[names(start)!="b5"]
+      }
+      f <- switch(response, 
+                  distance = dformula,
+                  ypixel = yformula)
+      mod <- suppressWarnings(
+        nls(f, data=dat, trace=F, start=start,
+            control=list(maxiter=100, minFactor=1/2048, warnOnly=T))
+        )
+      if(class(mod)=="nls"){
+        mod <- suppressWarnings(
+          nls(f, data=dat, trace=F, start=coef(mod),
+              control=list(maxiter=100, minFactor=1/2048, warnOnly=T)))
+        cfs <- coef(mod)
+        if(3 %in% fix) cfs <- c(cfs, b3=0)
+        if(4 %in% fix) cfs <- c(cfs, b4=0)
+        if(5 %in% fix) cfs <- c(cfs, b5=1)
+        mod <- list(formula=mod$call$formula, coefs=cfs)
+      } else
+        mod <- NULL
       res <- list(cam.model=cmod, model=mod, data=dat, dim=dim, id=id)
     }
     depcal(res)
@@ -807,7 +861,7 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3){
   
   nofits <- unlist(lapply(res, function(m) is.null(m$model)))
   if(any(nofits)){
-    message("Warning: One or more deployments had too few poles to fit a model:")
+    message("Warning: One or more deployments failed to fit a model:")
     cat(deps[nofits], sep="\n")
   }
   calibs(res)
@@ -819,11 +873,12 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3){
 
 #INPUT
 # mod: a depcal object
+# cfs: a named vector of model coefficients
 # i: integer indicating which image from dat to show
 
-plot_deployment_image <- function(mod, cfs=NULL, i=1, dists=c(1,2,5,10,20)){
+plot_deployment_image <- function(mod, cfs=mod$model$coefs, i=1, 
+                                  dists=c(1,2,5,10,20), title=TRUE){
   dat <- mod$data
-  if(is.null(cfs)) cfs <- mod$model$coefs
   imgpath <- with(dat[i,], file.path(dir, image_name))
   img <- jpeg::readJPEG(imgpath, native=T)
   imdim <- dim(img)
@@ -833,14 +888,61 @@ plot_deployment_image <- function(mod, cfs=NULL, i=1, dists=c(1,2,5,10,20)){
     matrix(ncol=length(dists))
   p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
     xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
-    theme_void() + 
-    coord_equal()
-  for(d in 1:length(dists))
-    p <- p + geom_line(aes(x, y), data.frame(x=xsq, y=yy[, d]), col="red")
+    theme_void() + coord_equal() + ggtitle(mod$id)
+  for(d in 1:length(dists)){
+    i <- yy[, d]>-imdim[1]
+    p <- p + geom_line(aes(x, y), data.frame(x=xsq, y=yy[, d])[i, ], col="red")
+  }
   p <- p + geom_label(aes(xg, imdim[1]-yg, label=round(distance,1)), dat, 
-                      size=3, label.padding=unit(0.1, "lines")) + 
-    geom_text(aes(x,y,label=d), data.frame(x=-20, y=yy[1,], d=dists), col="red")
+                      size=3, label.padding=unit(0.1, "lines"))
+  i <- yy[1,]>-imdim[1]
+  p <- p + geom_text(aes(x,y,label=d), data.frame(x=-20, y=yy[1,i], d=dists[i]), col="red")
   p
+}
+
+#plot_deployment_model
+
+# Plot deployment model diagnostic distance against relative y pixel
+
+#INPUT
+# mod: a depcal object
+
+plot_deployment_model <- function(mod){
+  dat <- mod$data
+  colrange <- grey.colors(11, start=0, end=0.8)
+  cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
+  mxx <- max(max(dat$rely),1.5)
+  with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,mxx), ylim=c(0, 1.5*max(distance)),
+                 xlab="Relative y pixel position", ylab="Distance from camera",
+                 main=mod$id, 
+                 sub="Shading from image left (dark) to right edge", cex.sub=0.7))
+  sq <- seq(0, mxx, len=100)
+  lines(sq, predict.r(mod$model, -0.5, sq), col=colrange[1])
+  lines(sq, predict.r(mod$model, 0, sq), col=colrange[6])
+  lines(sq, predict.r(mod$model, 0.5, sq), col=colrange[11])
+}
+
+#plot_deployment_poles
+
+# Plot deployment model diagnostic poles
+
+#INPUT
+# mod: a depcal object
+
+plot_deployment_poles <- function(mod){
+  dat <- mod$data
+  dim <- as.list(apply(dat[,c("ImageWidth","ImageHeight")],2,unique))
+  colrange <- grey.colors(11, start=0, end=0.8)
+  relht <- with(dat, (1-ht) / (ht-hb))
+  plot(c(0, dim$ImageWidth), -c(0, dim$ImageHeight), 
+       asp=1, xlab="x pixel", ylab="y pixel", type="n", 
+       main=mod$id, cex.sub=0.7)
+  lines(c(0,rep(c(dim$ImageWidth,0),each=2)), c(rep(c(0,-dim$ImageHeight),each=2),0), lty=2)
+  cols <- colrange[with(dat, 1+round(10*((distance-min(distance))/diff(range(distance)))))]
+  for(i in 1:nrow(dat)){
+    with(dat, lines(c(xg[i],xt[i]), -c(yg[i],yt[i]), col=cols))
+    with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
+  }
 }
 
 #plot.depcal#
@@ -849,46 +951,24 @@ plot_deployment_image <- function(mod, cfs=NULL, i=1, dists=c(1,2,5,10,20)){
 
 #INPUT
 # mod: a deployment calibration object of class depcal, created using dep.cam
+# type: the type of diagnostic to plot
 
-#Generates two diagnostic plots for a deployment calibration model:
-#1. Distance from camera as a function of pixel position within image with model
+#Generates one of three diagnostic plots for a deployment calibration model, depending on type:
+#1. model: Distance from camera as a function of pixel position within image with model
 #   trend lines
-#2. A diagram of digitised poles and the point's at which they were digitised
+#2. poles: A diagram of digitised poles and the point's at which they were digitised
 #   as they appear in images.
+#3. image: one of the deployment calibration images overplotted with distance contours
 
-plot.depcal <- function(mod){
-  dep <- mod$id
-    
+plot.depcal <- function(mod, type=c("model", "poles", "image")){
+  type <- match.arg(type)
   if(is.null(mod$model)){
     message(paste("Model without a fit not plotted:", dep, "\n"))
   } else{
-    dim <- as.list(apply(mod$data[,c("ImageWidth","ImageHeight")],2,unique))
-    dat <- mod$data
-    colrange <- grey.colors(11, start=0, end=0.8)
-    
-    #PLOT DISTANCE V Y-PIXEL RELATIONSHIP
-    cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
-    mxx <- max(max(dat$rely),1.5)
-    with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,mxx), ylim=c(0, 1.5*max(distance)),
-                   xlab="Relative y pixel position", ylab="Distance from camera",
-                   main=dep, 
-                   sub="Shading from image left (dark) to right edge", cex.sub=0.7))
-    sq <- seq(0, mxx, len=100)
-    lines(sq, predict.r(mod$model, -0.5, sq), col=colrange[1])
-    lines(sq, predict.r(mod$model, 0, sq), col=colrange[6])
-    lines(sq, predict.r(mod$model, 0.5, sq), col=colrange[11])
-
-    #PLOT POLE IMAGE
-    relht <- with(dat, (1-ht) / (ht-hb))
-    plot(c(0, dim$ImageWidth), -c(0, dim$ImageHeight), 
-         asp=1, xlab="x pixel", ylab="y pixel", type="n", 
-         main=dep, cex.sub=0.7)
-    lines(c(0,rep(c(dim$ImageWidth,0),each=2)), c(rep(c(0,-dim$ImageHeight),each=2),0), lty=2)
-    cols <- colrange[with(dat, 1+round(10*((distance-min(distance))/diff(range(distance)))))]
-    for(i in 1:nrow(dat)){
-      with(dat, lines(c(xg[i],xt[i]), -c(yg[i],yt[i]), col=cols))
-      with(dat, points(c(xb[i],xt[i]), -c(yb[i],yt[i]), pch=18, cex=0.7, col=2))
-    }
+    switch(type,
+           model = plot_deployment_model(mod),
+           poles = plot_deployment_poles(mod),
+           image = plot_deployment_image(mod))
   }
 }
 
@@ -900,8 +980,8 @@ plot.depcal <- function(mod){
 #INPUT
 # mods: a list of either camera or deployment calibration objects
 
-plot.calibs <- function(mods){
-  lapply(mods, plot)
+plot.calibs <- function(mods, type="model"){
+  lapply(mods, plot, type)
 }
 
 #show.image#
@@ -954,19 +1034,16 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
 #OUTPUT
 #A vector numeric radii.
 #Note, units depend on the units of pole height above ground used to calibrate the site model
-
 predict.r <- function(mod, relx, rely){
-  f <- mod$formula[[3]]
   vals <- c(list(relx=relx, rely=rely), mod$coefs)
-  res <- eval(f, vals)
+  res <- eval(dformula[[3]], vals)
   res[res<0] <- Inf
   res
 }
 
 predict.y <- function(coefs, relx, dist){
-  f <- formula(rely ~ b3 + b4*relx + (b1 + b2*relx) / dist)[[3]]
-  vals <- c(list(relx=relx, dist=dist), coefs)
-  eval(f, vals)
+  vals <- c(list(relx=relx, distance=dist), coefs)
+  eval(yformula[[3]], vals)
 }
   
 #predict.pos#
