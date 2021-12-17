@@ -7,8 +7,8 @@ camcal <- setClass("camcal", representation("list"))
 depcal <- setClass("depcal", representation("list"))
 calibs <- setClass("calibs", representation("list"))
 
-dformula <- formula(distance ~ (b1 + b4*relx) / (rely^b5 - b2 + b3*relx))
-yformula <- formula(rely ~ ((b1 + b4*relx) / distance + b2 - b3*relx)^(1/b5))
+dformula <- formula(distance ~ (b2 + b4*relx) / (rely^b5 - b1 + b3*relx))
+yformula <- formula(rely ~ ((b2 + b4*relx) / distance + b1 - b3*relx)^(1/b5))
 
 #GENERAL FUNCTIONS#############################################
 
@@ -730,6 +730,42 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
     res <- dplyr::bind_rows(res)
     res[order(res$rowid), -which(names(res)=="rowid")]
   }
+}
+
+# Penalised sum of squares function for deployment model
+
+# INPUT
+#  cfs: named vector of 2 to 5 model coeficients (names "b1", "b2" etc)
+#  dat: dataframe with columns distance, rely and relx
+#  response: which response variable to use - ypixel fits to rely
+
+# Low initial b1 value needed in defualts to stabilise fitting - 
+# multiple false minima encountered at higher values.
+# Requires yformula and dformula in the global environment
+
+ssq <- function(cfs, dat, response=c("distance", "ypixel")){
+  response <- match.arg(response)
+  defaults <- c(b1=0, b2=2, b3=0, b4=0, b5=1) #default starting parameters
+  penmul <- c(1, 0.005, 0.01, 0.01, 0.1) #penalty multipliers
+  penpwr <- c(6, 6, 10, 10, 6) #penalty powers
+  
+  n <- length(cfs)
+  if(n<5) cfs <- c(cfs, defaults[(n+1):5])
+  if(response=="ypixel"){
+    f <- yformula
+    resp <- dat$rely
+    vals <- c(list(relx=dat$relx, distance=dat$distance), cfs)
+  } else{
+    f <- dformula
+    resp <- dat$distance
+    vals <- c(list(relx=dat$relx, rely=dat$rely), cfs)
+  }
+  prdn <- eval(f[[3]], vals)
+  ssq <- sum((prdn - resp)^2) #sum of squares
+  cfs["b1"] <- 1-cfs["b1"]^(1/cfs["b5"]) #horizon rather than b1 parameter
+  defaults["b1"] <- 0.5 #target horizon
+  pen <- sum(penmul * abs(cfs-defaults) ^ penpwr) #penalty
+  ssq+pen  
 }
 
 #cal.dep#
