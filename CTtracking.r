@@ -745,7 +745,7 @@ ssq_dep <- function(cfs, dat, formula, defaults){
   
   n <- length(cfs)
   if(n<5) cfs <- c(cfs, defaults[(n+1):5])
-  if(response=="rely"){
+  if(formula[[2]]=="rely"){
     resp <- dat$rely
     vals <- c(list(relx=dat$relx, distance=dat$distance), cfs)
   } else{
@@ -797,21 +797,8 @@ ssq_dep <- function(cfs, dat, formula, defaults){
 #   d ~ (b2 + b4*x) / (y^5 - b1 + b3*x)
 #   y ~ (b2 + b4*x) / d + b1 - b3*x
 
-dir <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool2018/Hoge Veluwe test"
-exdat <- read.exif(file.path(dir, "Images"))
-depdat <- read.digidat(file.path(dir, "Images"), exifdat=exdat) %>%
-  separate("sequence_annotation", c("type", "distance", "height"), sep = ";" ) %>%
-  filter(!is.na(distance)) %>%
-  pairup(c("folder", "image_name" ))
-deptag="folder"
-dat <- subset(depdat, folder=="V08")
-
-dmods <- cal.dep(depdat, deptag="folder")
-dmods$H4R1_03$model$coefs
-
 cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, flexpoles=5,
                     response=c("distance", "rely")){
-  response <- match.arg(response)
 
   cal <- function(dat, id=NULL, cmod=NULL){
     dim <- as.list(apply(dat[,c("ImageWidth","ImageHeight")], 2, unique))
@@ -821,7 +808,7 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, flexpoles=5,
     
     defaults <- c(b1=0, b2=2, b3=0, b4=0, b5=1) #default starting parameters
     formulae <- list(distance=formula(distance ~ (b2 + b4*relx) / (rely^b5 - b1 + b3*relx)),
-                     ypixel=formula(rely ~ ((b2 + b4*relx) / distance + b1 - b3*relx)^(1/b5)))
+                     rely=formula(rely ~ ((b2 + b4*relx) / distance + b1 - b3*relx)^(1/b5)))
     
     dat$relx <- dat$xg/dim$x - 0.5
     dat$rely <- dat$yg/dim$y
@@ -854,6 +841,7 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, flexpoles=5,
             }
         }
 
+  response <- match.arg(response)
   if(length(cmods)==1) cmod <- cmods[[1]]
   if(is.null(deptag)){
     if(is.null(cmods)) cmod <- cal.cam(dat)[[1]]
@@ -874,6 +862,36 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, flexpoles=5,
   calibs(res)
 }
 
+#predict.depcal#
+
+#Predict radial distance from camera given pixel positions,
+#or relative y pixel position (rely) from relx and distance
+
+#INPUT
+# mod: a depcal object (site calibration model, produced using cal.dep(...))
+# data: a dataframe with columns relx and either rely or distance, depending on response
+# response: whether to predict distance or rely
+
+#OUTPUT
+#A vector of numeric radii.
+#Note, units depend on the units of pole height above ground used to calibrate the site model
+
+predict.depcal <- function(mod, data, cfs=mod$model$coefs, response=c("distance", "rely")){
+  response <- match.arg(response)
+  reqd <- c("relx", "rely", "distance")
+  if(response=="distance"){
+    if(!all(reqd[1:2] %in% names(data))) stop("Data must contain columns relx and rely")
+    vals <- c(list(relx=data$relx, rely=data$rely), cfs)
+    res <- eval(mod$model$formulae$distance[[3]], vals)
+    res[res<0] <- Inf
+  } else{
+    if(!all(reqd[c(1,3)] %in% names(data))) stop("Data must contain columns relx and distance")
+    vals <- c(list(relx=data$relx, distance=data$distance), cfs)
+    res <- eval(mod$model$formulae$rely[[3]], vals)
+  }
+  res
+}
+
 #plot_deployment_image
 
 # Plot deployment image with overplotted pole base distances and model distance contours
@@ -891,8 +909,8 @@ plot_deployment_image <- function(mod, cfs=mod$model$coefs, i=1,
   imdim <- dim(img)
   xsq <- seq(1, imdim[2], len=10)
   xd <- expand.grid(xsq/imdim[2]-0.5, dists)
-  yy <- imdim[1] * (1 - predict.y(cfs, xd[,1], xd[,2])) %>%
-    matrix(ncol=length(dists))
+  yy <- predict(mod, data.frame(relx=xd[,1], distance=xd[,2]), cfs, "rely")
+  yy <- matrix(imdim[1] * (1 - yy), ncol=length(dists))
   p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
     xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
     theme_void() + coord_equal() + ggtitle(mod$id)
@@ -924,9 +942,9 @@ plot_deployment_model <- function(mod){
                  main=mod$id, 
                  sub="Shading from image left (dark) to right edge", cex.sub=0.7))
   sq <- seq(0, mxx, len=100)
-  lines(sq, predict.r(mod$model, -0.5, sq), col=colrange[1])
-  lines(sq, predict.r(mod$model, 0, sq), col=colrange[6])
-  lines(sq, predict.r(mod$model, 0.5, sq), col=colrange[11])
+  lines(sq, predict(mod, data.frame(relx=-0.5, rely=sq)), col=colrange[1])
+  lines(sq, predict(mod, data.frame(relx=0, rely=sq)), col=colrange[6])
+  lines(sq, predict(mod, data.frame(relx=0.5, rely=sq)), col=colrange[11])
 }
 
 #plot_deployment_poles
@@ -1029,30 +1047,6 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
 #DATA SUMMARY FUNCTIONS#############################################
 
 
-#predict.r#
-
-#Predict radial distance from camera given pixel positions
-
-#INPUT
-# mod: a depcal object (site calibration model, produced using cal.dep(...))
-# relx: x pixel position relative to the centre line
-# rely: y pixel position relative to the top edge
-
-#OUTPUT
-#A vector numeric radii.
-#Note, units depend on the units of pole height above ground used to calibrate the site model
-predict.r <- function(mod, relx, rely){
-  vals <- c(list(relx=relx, rely=rely), mod$coefs)
-  res <- eval(dformula[[3]], vals)
-  res[res<0] <- Inf
-  res
-}
-
-predict.y <- function(coefs, relx, dist){
-  vals <- c(list(relx=relx, distance=dist), coefs)
-  eval(yformula[[3]], vals)
-}
-  
 #predict.pos#
 
 #Predicts position relative to camera given image pixel positions and site calibration models 
@@ -1102,9 +1096,9 @@ predict.pos <- function(dat, mods, deptag="deployment"){
   res <- lapply(deps, function(d){
     dt <- subset(dat, dat[,deptag]==d)
     cm <- mods[[d]]$cam.model
-    sm <- mods[[d]]$model
-    data.frame(dt, radius=predict.r(sm, dt$x/dt$ImageWidth-0.5, dt$y/dt$ImageHeight),
-               angle=cm$APratio * (dt$x/dt$ImageWidth-0.5))
+    sm <- mods[[d]]
+    nd <- data.frame(relx=dt$x/dt$ImageWidth-0.5, rely=dt$y/dt$ImageHeight)
+    data.frame(dt, radius=predict(sm, nd), angle=cm$APratio * nd$relx)
   })
   res <- dplyr::bind_rows(res)
   tab <- table(res$sequence_id)
