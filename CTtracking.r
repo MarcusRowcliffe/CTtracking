@@ -1,14 +1,10 @@
 require(magick)
 require(jpeg)
 require(tidyverse)
-require(ggplot2)
 
 camcal <- setClass("camcal", representation("list"))
 depcal <- setClass("depcal", representation("list"))
 calibs <- setClass("calibs", representation("list"))
-
-dformula <- formula(distance ~ (b2 + b4*relx) / (rely^b5 - b1 + b3*relx))
-yformula <- formula(rely ~ ((b2 + b4*relx) / distance + b1 - b3*relx)^(1/b5))
 
 #GENERAL FUNCTIONS#############################################
 
@@ -743,24 +739,20 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
 # multiple false minima encountered at higher values.
 # Requires yformula and dformula in the global environment
 
-ssq <- function(cfs, dat, response=c("distance", "ypixel")){
-  response <- match.arg(response)
-  defaults <- c(b1=0, b2=2, b3=0, b4=0, b5=1) #default starting parameters
+ssq_dep <- function(cfs, dat, formula, defaults){
   penmul <- c(1, 0.005, 0.01, 0.01, 0.1) #penalty multipliers
   penpwr <- c(6, 6, 10, 10, 6) #penalty powers
   
   n <- length(cfs)
   if(n<5) cfs <- c(cfs, defaults[(n+1):5])
-  if(response=="ypixel"){
-    f <- yformula
+  if(response=="rely"){
     resp <- dat$rely
     vals <- c(list(relx=dat$relx, distance=dat$distance), cfs)
   } else{
-    f <- dformula
     resp <- dat$distance
     vals <- c(list(relx=dat$relx, rely=dat$rely), cfs)
   }
-  prdn <- eval(f[[3]], vals)
+  prdn <- eval(formula[[3]], vals)
   ssq <- sum((prdn - resp)^2) #sum of squares
   cfs["b1"] <- 1-cfs["b1"]^(1/cfs["b5"]) #horizon rather than b1 parameter
   defaults["b1"] <- 0.5 #target horizon
@@ -802,60 +794,45 @@ ssq <- function(cfs, dat, response=c("distance", "ypixel")){
 
 #Distance (d), relx (x) and rely (y) pixel positions are modelled with either distance or
 #y pixel as response using respective non-linear functions:
-#   d ~ (b1 + b4*x) / (y^5 - b2 + b3*x)
-#   y ~ (b1 + b4*x) / d + b2 - b3*x
+#   d ~ (b2 + b4*x) / (y^5 - b1 + b3*x)
+#   y ~ (b2 + b4*x) / d + b1 - b3*x
 
-#If the number of poles available for a deployment is less than or equal to 
-#minpoles, no model fitting is attempted and the output is NULL, with a warning.
-cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3,
-                    fix=c(4,5), response=c("distance", "ypixel")){
+dir <- "C:/Users/rowcliffe.m/OneDrive - Zoological Society of London/CameraTrapping/REM/Calibration/Mytool2018/Hoge Veluwe test"
+exdat <- read.exif(file.path(dir, "Images"))
+depdat <- read.digidat(file.path(dir, "Images"), exifdat=exdat) %>%
+  separate("sequence_annotation", c("type", "distance", "height"), sep = ";" ) %>%
+  filter(!is.na(distance)) %>%
+  pairup(c("folder", "image_name" ))
+deptag="folder"
+dat <- subset(depdat, folder=="V08")
+
+dmods <- cal.dep(depdat, deptag="folder")
+dmods$H4R1_03$model$coefs
+
+cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, flexpoles=5,
+                    response=c("distance", "rely")){
   response <- match.arg(response)
-  if(!all(fix %in% 3:5)) stop("Fix must contain only integers between 3 and 5")
 
   cal <- function(dat, id=NULL, cmod=NULL){
-    if(nrow(dat)<minpoles){
-      res <- list(cam.model=cmod, model=NULL, data=NULL, dim=NULL, id=id)
-    } else{
-      dim <- as.list(apply(dat[,c("ImageWidth","ImageHeight")], 2, unique))
-      if(length(unlist(dim))>2) 
-        stop("There is more than one unique value per deployment for ImageWidth and/or ImageHeight in dat")
-      names(dim) <- c("x","y")
-      
-      dat$rely <- dat$yg/dim$y
-      dat$relx <- dat$xg/dim$x - 0.5
-      start <- list(b1=1, b2=0, b3=0, b4=0, b5=1)
-      if(3 %in% fix){
-        dat$b3=0
-        start <- start[names(start)!="b3"]
-      }
-      if(4 %in% fix){
-        dat$b4 <- 0
-        start <- start[names(start)!="b4"]
-      }
-      if(5 %in% fix){
-        dat$b5 <- 1
-        start <- start[names(start)!="b5"]
-      }
-      f <- switch(response, 
-                  distance = dformula,
-                  ypixel = yformula)
-      mod <- suppressWarnings(
-        nls(f, data=dat, trace=F, start=start,
-            control=list(maxiter=100, minFactor=1/2048, warnOnly=T))
-        )
-      if(class(mod)=="nls"){
-        mod <- suppressWarnings(
-          nls(f, data=dat, trace=F, start=coef(mod),
-              control=list(maxiter=100, minFactor=1/2048, warnOnly=T)))
-        cfs <- coef(mod)
-        if(3 %in% fix) cfs <- c(cfs, b3=0)
-        if(4 %in% fix) cfs <- c(cfs, b4=0)
-        if(5 %in% fix) cfs <- c(cfs, b5=1)
-        mod <- list(formula=mod$call$formula, coefs=cfs)
-      } else
-        mod <- NULL
-      res <- list(cam.model=cmod, model=mod, data=dat, dim=dim, id=id)
+    dim <- as.list(apply(dat[,c("ImageWidth","ImageHeight")], 2, unique))
+    if(length(unlist(dim))>2) 
+      stop("There is more than one unique value per deployment for ImageWidth and/or ImageHeight in dat")
+    names(dim) <- c("x","y")
+    
+    defaults <- c(b1=0, b2=2, b3=0, b4=0, b5=1) #default starting parameters
+    formulae <- list(distance=formula(distance ~ (b2 + b4*relx) / (rely^b5 - b1 + b3*relx)),
+                     ypixel=formula(rely ~ ((b2 + b4*relx) / distance + b1 - b3*relx)^(1/b5)))
+    
+    dat$relx <- dat$xg/dim$x - 0.5
+    dat$rely <- dat$yg/dim$y
+    maxb <- if(nrow(dat)<flexpoles) 2 else 5
+    for(b in 2:maxb){
+      strt <- if(b==2) defaults[1:2] else c(mod$par, defaults[b])
+      mod <- optim(strt, ssq_dep, dat=dat, formula=formulae[[response]], defaults=defaults)
     }
+    defb <- if(b==5) NULL else defaults[(b+1):5] 
+    mod <- list(formulae=formulae, coefs=c(mod$par, defb), response=response)
+    res <- list(cam.model=cmod, model=mod, data=dat, dim=dim, id=id)
     depcal(res)
   }
 
@@ -893,12 +870,6 @@ cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, minpoles=3,
       cal(subdat, d, cmod)
     })
     names(res) <- deps
-  }
-  
-  nofits <- unlist(lapply(res, function(m) is.null(m$model)))
-  if(any(nofits)){
-    message("Warning: One or more deployments failed to fit a model:")
-    cat(deps[nofits], sep="\n")
   }
   calibs(res)
 }
@@ -1063,7 +1034,7 @@ show.image <- function(dat, dir, type=c("pole", "animal")){
 #Predict radial distance from camera given pixel positions
 
 #INPUT
-# mod: a depcal object (site calibration model, produced using cal.site(...))
+# mod: a depcal object (site calibration model, produced using cal.dep(...))
 # relx: x pixel position relative to the centre line
 # rely: y pixel position relative to the top edge
 
