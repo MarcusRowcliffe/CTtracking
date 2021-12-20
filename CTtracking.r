@@ -796,7 +796,7 @@ ssq_dep <- function(cfs, dat, formula, defaults){
 #   d ~ (b2 + b4*x) / (y^5 - b1 + b3*x)
 #   y ~ (b2 + b4*x) / d + b1 - b3*x
 
-cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, flexpoles=5,
+cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, flexpoles=6,
                     response=c("distance", "rely")){
 
   cal <- function(dat, id=NULL, cmod=NULL){
