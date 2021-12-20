@@ -608,17 +608,16 @@ cal.cam <- function(poledat, camtag=NULL){
 # mod: a camcal object
 
 plot_camera_model <- function(mod){
-  cols <- grey.colors(11, start=0, end=0.8)
+  colrange <- grey.colors(101, start=0, end=0.8)
   dat <- mod$data
-  x <- abs(dat$relx)
-  i <- round(1 + (x-min(x))*10/diff(range(x)))
-  with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=mod$id,
+  cols <- colrange[1 + round(200 * abs(dat$relx))]
+  with(dat, plot(distance, length/pixlen, col=cols, pch=16, main=mod$id,
                  ylab="length/pixel", xlab="distance", 
                  sub="Shading from image centre (dark) to edge", cex.sub=0.7))
   FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
   dr <- range(dat$distance)
   lines(dr, dr/(FS[1]*mod$dim$y), col=cols[1])
-  lines(dr, dr/(FS[2]*mod$dim$y), col=cols[11])
+  lines(dr, dr/(FS[2]*mod$dim$y), col=cols[101])
 }
 
 #plot_camera_poles
@@ -934,17 +933,17 @@ plot_deployment_image <- function(mod, cfs=mod$model$coefs, i=1,
 
 plot_deployment_model <- function(mod){
   dat <- mod$data
-  colrange <- grey.colors(11, start=0, end=0.8)
-  cols <- with(dat, colrange[1+round(10*((relx-min(relx))/diff(range(relx))))])
-  mxx <- max(max(dat$rely),1.5)
+  colrange <- grey.colors(101, start=0, end=0.8)
+  cols <- colrange[1 + round(100 * (dat$relx+0.5))]
+  mxx <- max(dat$rely, 1.5)
   with(dat, plot(rely, distance, col=cols, pch=16, xlim=c(0,mxx), ylim=c(0, 1.5*max(distance)),
                  xlab="Relative y pixel position", ylab="Distance from camera",
                  main=mod$id, 
                  sub="Shading from image left (dark) to right edge", cex.sub=0.7))
   sq <- seq(0, mxx, len=100)
   lines(sq, predict(mod, data.frame(relx=-0.5, rely=sq)), col=colrange[1])
-  lines(sq, predict(mod, data.frame(relx=0, rely=sq)), col=colrange[6])
-  lines(sq, predict(mod, data.frame(relx=0.5, rely=sq)), col=colrange[11])
+  lines(sq, predict(mod, data.frame(relx=0.5, rely=sq)), col=colrange[101])
+  lines(sq, predict(mod, data.frame(relx=0, rely=sq)), col=colrange[51])
 }
 
 #plot_deployment_poles
