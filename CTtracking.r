@@ -1,5 +1,5 @@
-require(magick)
-require(tidyr)
+#require(magick)
+#require(tidyr)
 
 require(jpeg)
 require(tidyverse)
