@@ -1,6 +1,7 @@
 #Using V0.2 (Laura Vargas Zarco version of Animaltracker)
 
 devtools::source_url("https://raw.githubusercontent.com/MarcusRowcliffe/CTtracking/V0.3.2/CTtracking.r")
+devtools::source_url("https://raw.githubusercontent.com/MarcusRowcliffe/CTtracking/Agouti/CTtracking.r")
 source("CTtracking.r")
 
 #install.exiftool()
@@ -45,6 +46,7 @@ View(caldat)
 dmods <- cal.dep(caldat, cmods, "deployment", deptab)
 plot(dmods)
 
+#Predicting animal positions and sequence speeds
 animdat <- subset(depdat, species!="calibration")
 posdat <- predict.pos(animdat, dmods)
 View(animdat)
@@ -55,8 +57,7 @@ hist(posdat$angle)
 seqdat <- seq.summary(posdat)
 View(seqdat)
 
-install.packages("jpeg")
-library(jpeg)
-show.image(animdat, file.path(deppth, "S01"), "anim")
+#Checking digitised points on images
+show.image(animdat, "anim")
 View(animdat)
 
