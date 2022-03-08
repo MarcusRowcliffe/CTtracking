@@ -882,7 +882,6 @@ plot.calibs <- function(mods){
 
 #INPUT
 # dat: a dataframe image names and digitisation points
-# dir: character string naming the directory containing the images
 # type: whether dat contains pole or animal data
 # 
 #dat must contain the following columns:
@@ -893,10 +892,10 @@ plot.calibs <- function(mods){
 #For animal data, typically applied to the $animal compenent of read.digidat() output.
 #For pole data, typically applied to the $data component of cal.site() output.
 
-show.image <- function(dat, dir, type=c("pole", "animal")){
+show.image <- function(dat, type=c("pole", "animal")){
   type <- match.arg(type)
   for(i in 1:nrow(dat)){
-    imgpath <- file.path(dir, dat$image_name[i])
+    imgpath <- file.path(dat$dir, dat$image_name[i])
     img <- jpeg::readJPEG(imgpath, native=T)
     imdim <- dim(img)
     title <- dat$image_name[i]
