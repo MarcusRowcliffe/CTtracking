@@ -578,7 +578,7 @@ cal.cam <- function(poledat, camtag=NULL){
     dat$relx <- apply(dat[c("xb","xt")], 1, mean)/dim$x-0.5
     FSratio <- with(dat, distance*pixlen/(length*dim$y))
     APratio <- mean(with(dat, (acos(1-length^2/(2*(distance^2+(length/2)^2)))*dim$x/pixlen)))
-    mod <- lm(FSratio~I(relx^2), data=dat)
+    mod <- coef(lm(FSratio~I(relx^2), data=dat))
     camcal(list(model=mod, APratio=APratio, dim=dim, data=dat, 
                 id=if(is.null(camtag)) NULL else unique(dat[,camtag])))
   }
@@ -602,7 +602,6 @@ cal.cam <- function(poledat, camtag=NULL){
   calibs(out)
 }
 
-
 #plot.camcal#
 
 #INPUT
@@ -623,7 +622,7 @@ plot.camcal <- function(mod){
   with(dat, plot(distance, length/pixlen, col=cols[i], pch=16, main=mod$id,
                  ylab="length/pixel", xlab="distance", 
                  sub="Shading from image centre (dark) to edge", cex.sub=0.7))
-  FS <- predict(mod$mod, newdata=data.frame(relx=c(0,0.5)))
+  FS <- mod$model[1] + mod$model[2] * c(0,0.5)
   dr <- range(dat$distance)
   lines(dr, dr/(FS[1]*mod$dim$y), col=cols[1])
   lines(dr, dr/(FS[2]*mod$dim$y), col=cols[11])
@@ -670,7 +669,7 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
   
   calc <- function(dat, cmod){
     if(!"relx" %in% names(dat)) dat$relx <- (dat$xb+dat$xt)/(2 * cmod$dim$x) - 0.5
-    FSratio <- predict(cmod$model, newdata = data.frame(relx=dat$relx))
+    FSratio <- cmod$model[1] + cmod$model[2] * dat$relx
     dat$pixlen <- with(dat, sqrt((xt-xb)^2 + (yt-yb)^2))
     dat$distance <- with(dat, FSratio*length*cmod$dim$y/pixlen)
     dat
