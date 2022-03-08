@@ -895,7 +895,7 @@ plot.calibs <- function(mods){
 show.image <- function(dat, type=c("pole", "animal")){
   type <- match.arg(type)
   for(i in 1:nrow(dat)){
-    imgpath <- file.path(dat$dir[i], dat$image_name[i])
+    imgpath <- file.path(dat$dir, dat$image_name[i])
     img <- jpeg::readJPEG(imgpath, native=T)
     imdim <- dim(img)
     title <- dat$image_name[i]
