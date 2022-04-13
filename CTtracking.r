@@ -602,6 +602,15 @@ cal.cam <- function(poledat, camtag=NULL){
   calibs(out)
 }
 
+cmod_from_data <- function(APratio, Intercept, relx, dim_x, dim_y){
+  mod_list = list(
+    ap_ratio = APratio,
+    model=c(Intercept, relx),
+    dim=list(x=dim_x, y=dim_y)
+  )
+}
+
+
 #plot.camcal#
 
 #INPUT
