@@ -133,7 +133,7 @@ read.exif <- function(path,
   cmd <- paste("exiftool -ext jpg -r -t -s", ff, paste0('"', path, '"'))
   wd <- getwd()
   setwd(toolpath)
-  txtout <- shell(cmd, intern=TRUE)
+  txtout <- system(cmd, intern=TRUE)
   setwd(wd)
   
   i <- grepl("\t", txtout)
