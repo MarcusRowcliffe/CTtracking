@@ -910,18 +910,18 @@ plot_deployment_image <- function(mod, cfs=mod$model$coefs, i=1,
   xd <- expand.grid(xsq/imdim[2]-0.5, dists)
   yy <- predict(mod, data.frame(relx=xd[,1], distance=xd[,2]), cfs, "rely")
   yy <- matrix(imdim[1] * (1 - yy), ncol=length(dists))
-  p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
-    xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
-    theme_void() + coord_equal() + ggtitle(mod$id)
-  for(d in 1:length(dists)){
-    i <- yy[, d]>-imdim[1]
-    p <- p + geom_line(aes(x, y), data.frame(x=xsq, y=yy[, d])[i, ], col="red")
-  }
-  p <- p + geom_label(aes(xg, imdim[1]-yg, label=round(distance,1)), dat, 
-                      size=3, label.padding=unit(0.1, "lines"))
-  i <- yy[1,]>-imdim[1]
-  p <- p + geom_text(aes(x,y,label=d), data.frame(x=-20, y=yy[1,i], d=dists[i]), col="red")
-  p
+#  p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
+#    xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
+#    theme_void() + coord_equal() + ggtitle(mod$id)
+#  for(d in 1:length(dists)){
+#    i <- yy[, d]>-imdim[1]
+#    p <- p + geom_line(aes(x, y), data.frame(x=xsq, y=yy[, d])[i, ], col="red")
+#  }
+#  p <- p + geom_label(aes(xg, imdim[1]-yg, label=round(distance,1)), dat, 
+#                      size=3, label.padding=unit(0.1, "lines"))
+#  i <- yy[1,]>-imdim[1]
+#  p <- p + geom_text(aes(x,y,label=d), data.frame(x=-20, y=yy[1,i], d=dists[i]), col="red")
+#  p
 }
 
 #plot_deployment_model
