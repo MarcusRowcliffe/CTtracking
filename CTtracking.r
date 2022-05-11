@@ -910,6 +910,7 @@ plot_deployment_image <- function(mod, cfs=mod$model$coefs, i=1,
   xd <- expand.grid(xsq/imdim[2]-0.5, dists)
   yy <- predict(mod, data.frame(relx=xd[,1], distance=xd[,2]), cfs, "rely")
   yy <- matrix(imdim[1] * (1 - yy), ncol=length(dists))
+  plot(xd)
 #  p <- ggplot() + annotation_raster(img, 1, imdim[2], 1, imdim[1]) + 
 #    xlim(-20, imdim[2]) + ylim(-imdim[1], imdim[1]) +
 #    theme_void() + coord_equal() + ggtitle(mod$id)
