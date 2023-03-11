@@ -1,4 +1,4 @@
-require(magick)
+# require(magick) # no longer required I think
 require(jpeg)
 require(tidyverse)
 
@@ -312,7 +312,7 @@ split.tags <- function(dat, tagsep=", ", valsep="|"){
   ###
   
   widedf <- longdf %>% 
-    tidyr::pivot_wider(rowid, names_from=V1, values_from=V2) %>%
+    tidyr::pivot_wider(names_from=V1, values_from=V2) %>%
     as.data.frame() %>% 
     utils::type.convert(as.is=TRUE)
   dplyr::select(widedf, -any_of(c("NA", "rowid")))
@@ -732,11 +732,11 @@ calc.distance <- function(dat, cmods, idtag=NULL, lookup=NULL){
 # INPUT
 #  cfs: named vector of 2 to 5 model coeficients (names "b1", "b2" etc)
 #  dat: dataframe with columns distance, rely and relx
-#  response: which response variable to use - ypixel fits to rely
+#  formula: a model formula - see cal.dep for options
+#  defaults: default parameter values to use for simpler models
 
-# Low initial b1 value needed in defualts to stabilise fitting - 
+# Low initial b1 value needed in defaults to stabilise fitting - 
 # multiple false minima encountered at higher values.
-# Requires yformula and dformula in the global environment
 
 ssq_dep <- function(cfs, dat, formula, defaults){
   penmul <- c(1, 0.005, 0.01, 0.01, 0.1) #penalty multipliers
@@ -793,7 +793,7 @@ ssq_dep <- function(cfs, dat, formula, defaults){
 
 #Distance (d), relx (x) and rely (y) pixel positions are modelled with either distance or
 #y pixel as response using respective non-linear functions:
-#   d ~ (b2 + b4*x) / (y^5 - b1 + b3*x)
+#   d ~ (b2 + b4*x) / (y^b5 - b1 + b3*x)
 #   y ~ (b2 + b4*x) / d + b1 - b3*x
 
 cal.dep <- function(dat, cmods=NULL, deptag=NULL, lookup=NULL, flexpoles=6,
