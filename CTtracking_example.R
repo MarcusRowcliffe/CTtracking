@@ -3,18 +3,26 @@
 devtools::source_url("https://raw.githubusercontent.com/MarcusRowcliffe/CTtracking/V0.3.2/CTtracking.r")
 source("CTtracking.r")
 
-#install.exiftool()
+install.exiftool()
 folder <- "./Survey_yyy"
 
 #Camera calibration models
 campth <- file.path(folder, "Cameras")
-cam.exdat <- read.exif(campth)
+cam.exdat <- read.exif(campth, fields = "")
 View(cam.exdat)
 camdat <- read.digidat(campth, cam.exdat)
 View(camdat)
 camdat <- pairup(camdat, pair=c("folder", "image_name"))
 View(camdat)
 cmods <- cal.cam(camdat, camtag="folder")
+params <- data.frame(cameraModel=unique(cam.exdat$Model),
+                     apratio=cmods$RECONYX_3.1$APratio,
+                     dimx=cmods$RECONYX_3.1$dim$x,
+                     dimy=cmods$RECONYX_3.1$dim$y,
+                     relx=coef(cmods$RECONYX_3.1$model)[2],
+                     intercept=coef(cmods$RECONYX_3.1$model)[1]
+)
+write.csv(params, "camera_parameters.csv", row.names = FALSE)
 plot(cmods)
 
 #Do this first time
@@ -47,6 +55,9 @@ plot(dmods)
 
 animdat <- subset(depdat, species!="calibration")
 posdat <- predict.pos(animdat, dmods)
+#saveRDS(animdat, "animdat.rds")
+#saveRDS(dmods, "dmods.rds")
+
 View(animdat)
 View(posdat)
 hist(posdat$radius)

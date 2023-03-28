@@ -1,21 +1,129 @@
-#list.files.only#
+#VIDEO PROCESSING FUNCTIONS#############################################
+#install.exiftool#
 
-#Wrapper for list.files that over-rides include.dirs argument to return only file names
+#Downloads latest version of exiftool Windows executable from 
+#exiftool.org and prepares it for use locally.
 
-#INPUT and OUTPUT
-# As for list.files (... passes additional arguments to list.files)
-list.files.only <- function(path, ...){
-  args <- c(path=path, list(...))
-  if("full.names" %in% names(args)) fn <- TRUE else fn <- FALSE
-  if(fn) args$full.names <- TRUE else args <- c(args, full.names=TRUE)
-  fls <-  do.call(list.files, args)
-  res <- fls[!file.info(fls)$isdir]
-  if(!fn) res <- basename(res)
-  res
+#INPUT
+# dir: character string giving the directory in which to place exiftool
+
+#DETAILS
+#When dir is NULL (the default), exiftool is placed in a folder called exiftool
+#in the current R library, indentified using .libPaths(). A folder named exiftool 
+#is created if it doesn't already exist. An alternative to this function
+#is to download manually. For this, download ExifTool from exiftool.org, unzip
+#and rename the exiftool(-k).exe file to exiftool.exe, and place it in a relevant
+#folder.
+
+install.exiftool <- function(dir=NULL){
+  if(is.null(dir)) dir <- file.path(.libPaths()[1], "exiftool")
+  if(!dir.exists(dir)) dir.create(dir)
+  zipout <- file.path(dir, "temp.zip")
+  ver <- readLines("https://exiftool.org/ver.txt", warn=FALSE)
+  website <- paste0("https://exiftool.org/exiftool-", ver, ".zip")
+  utils::download.file(website, zipout)
+  utils::unzip(zipout, exdir=dir)
+  file.remove(zipout)
+  filenm <- file.path(dir, "exiftool.exe")
+  if(file.exists(filenm)) file.remove(filenm)
+  renm <- file.rename(list.files(dir, full.names = TRUE), filenm)
+  if(renm) paste("exiftool.exe successfully downloaded to", dir)
 }
 
+#read.exif#
 
-#VIDEO PROCESSING FUNCTIONS#############################################
+#Extract metadata from image files (*.jpg)
+
+#INPUT
+# path: a single character string giving a path to folder or file
+# fields: a character vector of field names to extract, optionally named (see details)
+# tagfield: a single character string giving the name of a field containing user tags
+# toolpath: a character string giving the path of the folder containing exiftool.exe
+# ...: additional arguments passed to split.tags
+
+#OUTPUT
+#A dataframe of image metadata, unless tagfield is specified and split.tags throws
+#up problems, in which case a dataframe is returned of the records identified as 
+#problematic by split.tags.
+
+#DETAILS
+#Runs command line executable exiftool, which must be present locally (see 
+#install.exiftool). Metadata is extracted from all jpeg images in the directory 
+#defined by path and all its subdirectories.
+#
+#The default fields are required in subsequent processing functions, where these
+#exact names are expected. If the necessary metadata exist under a different 
+#field headings, the fields vector can be named, in which case element names are
+#assigned to the resulting field names. To extract all available fields, set
+#fields="". Specified fields that don't exist in the metadata are ignored with a
+#warning. If no valid fields are found the function fails. 
+#
+#If tagfield is provided, this field will be separated into 
+#multiple columns in the output using split.tags, with additional arguments 
+#passed to this function (specifically tagsep and valsep, defining the tag and 
+#value separation strings). If you only want separated tagfield data, fields can
+#be set to NULL to suppress extraction of additional fields.
+#
+#By default (toolpath=NULL), the function expects to find the exiftool.exe file 
+#in a folder named exiftool within the current R library, where the 
+#install.exiftool function places it.
+
+read.exif <- function(path, type="jpg",
+                      fields=c("Directory", "FileName", "DateTimeOriginal", "ImageWidth", "ImageHeight"), 
+                      tagfield=NULL, toolpath=NULL, ...){
+  path <- normalizePath(path)
+  if(length(path)>1) stop("path must be a string pointing to a single directory or file")
+  if(is.null(toolpath)) toolpath <- file.path(.libPaths()[1], "exiftool")
+  if(!file.exists(file.path(toolpath,"exiftool.exe"))) stop(paste("Can't find", file.path(toolpath,"exiftool.exe")))
+  if(!file.exists(path)) stop("path not found")
+  if(dir.exists(path)) nfiles <- length(list.files(path, recursive = TRUE)) else nfiles <- 1
+  if(nfiles==0) stop(paste("No files found in", path))
+  
+  if(is.null(fields) & is.null(tagfield)) stop("No fields or tagfield defined")
+  ff <- fields
+  if(!"" %in% fields){
+    if(!is.null(tagfield))
+      if(!tagfield %in% fields) fields <- c(fields, tagfield)
+    ff <- paste(paste0("-", fields), collapse=" ")
+  }
+  
+  cmd <- paste("exiftool -ext", type, "-r -t -s", ff, paste0('"', path, '"'))
+  wd <- getwd()
+  setwd(toolpath)
+  txtout <- system(cmd, intern=TRUE)
+  setwd(wd)
+  
+  i <- grepl("\t", txtout)
+  if(sum(i)==0) stop("No matching fields found in metadata")
+  dflong <- read.table(text=txtout[i], stringsAsFactors = FALSE, sep="\t")
+  if(nfiles==1) dflong$rowid <- 1 else
+    dflong$rowid <- rep(1:(sum(!i)-2), head(diff(which(!i))-1, -1))
+  dfout <- as.data.frame(tidyr::pivot_wider(dflong, rowid, names_from=V1, values_from=V2))[,-1, drop=FALSE]
+  
+  if(!"" %in% fields){
+    notfound <- fields[!fields %in% names(dfout)]
+    if(length(notfound)>0) 
+      warning(paste("Some fields not found in metadata:", paste(notfound, collapse=", ")))
+  }
+  if(!is.null(names(fields))){
+    nms <- names(fields)[match(names(dfout), fields)]
+    names(dfout) <- ifelse(nms=="", names(dfout), nms)
+  }
+  
+  if(!is.null(tagfield)){
+    if(tagfield %in% names(dfout)){
+      utags <- split.tags(dfout[,tagfield], ...)
+      if(class(utags)=="integer"){
+        return(dfout[utags, ])
+      }
+      if(nrow(utags)!=nrow(dfout))
+        dfout <- utags else
+          dfout <- cbind(dplyr::select(dfout, -any_of(tagfield)), utags)
+    }
+  }
+  
+  type.convert(dfout, as.is=TRUE)
+}
 
 
 #extract.frames#
@@ -37,12 +145,10 @@ list.files.only <- function(path, ...){
 #computer time zone to that in which the videos were taken while processing, or use the time.offset argument.
 
 #The function calls two command line apps: ffmpeg and exiftool.
-#For installation of exiftool, see read.exif function help.
-#For installation of exifpro:
-# 1. download the build here: https://ffmpeg.zeranoe.com/builds
+#For installation of exiftool, see install.exif function help.
+#For installation of ffmpeg:
+# 1. download the latest master build here: https://ffmpeg.org/download.html
 # 2. extract the zip
-# 3. rename resulting folder ffmpeg
-# 4. move ffmpeg folder to C:/ (or other folder if preferred)
 
 #INPUT
 # fps: frame rate for extraction (frames per second)
@@ -51,7 +157,7 @@ list.files.only <- function(path, ...){
 # filetypes: character vector giving video file types to be processed (case insensitive)
 # fpath: a character string giving the path of the folder containing the ffmpeg executable
 # epath: a character string giving the path of the folder containing the exiftool executable
-# copy.jpegs: whether to additioanlly copy images (JPEG files) from inpath to outpath
+# copy.jpegs: whether to additionally copy images (JPEG files) from inpath to outpath
 # stamp.time: whether to add timestamps to the video frame files; if TRUE, creates metadata field CreateDate
 # time.offset: seconds to be added to timestamps in metadata of video frame files, if timestamp is TRUE
 # suffix.length: number of digits to add to frame file names as suffix 
@@ -64,12 +170,12 @@ list.files.only <- function(path, ...){
 # None: creates a set of image files, extracted from video files in inpath, mirroring the original 
 #       directory structure.
 
-extract.frames <- function(fps, inpath=NULL, outpath="frames", filetypes=c("MP4", "AVI"),
-                           fpath="C:/ffmpeg/bin", epath="C:/exiftool",
+extract.frames <- function(fps, inpath, outpath=file.path(dirname(inpath), "frames"),
+                           filetypes=c("MP4", "AVI"),
+                           fpath="C:/ffmpeg/bin", epath=NULL,
                            copy.jpegs=FALSE, stamp.time=FALSE, time.offset=0, 
                            suffix.length=3, recursive=TRUE, ...){
   
-  if(is.null(inpath)) inpath <- getwd()
   if(dirname(outpath)==".") outpath <- file.path(getwd(), outpath)
   if(dir.exists(outpath)){
     res <- readline("Outpath already exists and will be over-written. Do you want to proceed [y/n]? ")
@@ -77,7 +183,7 @@ extract.frames <- function(fps, inpath=NULL, outpath="frames", filetypes=c("MP4"
     unlink(outpath, recursive = T)
   }
   message("Reading metadata...")
-  vexf <- read.exif(inpath, toolpath=epath, recursive=recursive)
+  vexf <- read.exif(inpath, type="avi", toolpath=epath, recursive=recursive, fields="")
   dirs <- list.dirs(inpath)
   outdirs <- paste0(outpath, sub(inpath, "", dirs))
   for(path in outdirs) dir.create(path)
@@ -85,7 +191,7 @@ extract.frames <- function(fps, inpath=NULL, outpath="frames", filetypes=c("MP4"
   isvid <- grepl(paste(filetypes, collapse="|"), vexf$FileType)
   if(any(isvid)){
     for(i in 1:sum(isvid)){
-      file <- vexf$SourceFile[isvid][i]
+      file <- file.path(vexf$Directory, vexf$FileName)[isvid][i]
       message("Extracting frames from ", file, " (", i, " of ", sum(isvid), ")")
       extract(fps, file, outpaths[isvid][i], fpath, suffix.length)
     }
