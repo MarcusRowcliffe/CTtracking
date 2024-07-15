@@ -3,7 +3,7 @@
 devtools::source_url("https://raw.githubusercontent.com/MarcusRowcliffe/CTtracking/V0.3.2/CTtracking.r")
 source("CTtracking.r")
 
-install.exiftool()
+#install.exiftool()
 folder <- "./Survey_yyy"
 
 #Camera calibration models
