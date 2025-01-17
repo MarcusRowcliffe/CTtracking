@@ -27,18 +27,26 @@ calibs <- setClass("calibs", representation("list"))
 #folder.
 
 install.exiftool <- function(dir=NULL){
-  if(is.null(dir)) dir <- file.path(.libPaths()[1], "exiftool")
-  if(!dir.exists(dir)) dir.create(dir)
+  if(is.null(dir)) dir <- file.path(.libPaths()[1])
+  if(!dir.exists(dir)) stop("The chosen instalation directory does not exist")
   zipout <- file.path(dir, "temp.zip")
   ver <- readLines("https://exiftool.org/ver.txt", warn=FALSE)
-  website <- paste0("https://exiftool.org/exiftool-", ver, ".zip")
-  utils::download.file(website, zipout)
+  fldr <- paste0("exiftool-", ver, "_64")
+  temppath <- file.path(dir, fldr)
+  finalpath <- file.path(dir, "exiftool")
+  if(dir.exists(temppath)) unlink(temppath, recursive = TRUE)
+  if(dir.exists(finalpath)) unlink(finalpath, recursive = TRUE)
+  
+  webfile <- paste0("https://exiftool.org/", fldr, ".zip")
+  utils::download.file(webfile, zipout)
   utils::unzip(zipout, exdir=dir)
   file.remove(zipout)
-  filenm <- file.path(dir, "exiftool.exe")
-  if(file.exists(filenm)) file.remove(filenm)
-  renm <- file.rename(list.files(dir, full.names = TRUE), filenm)
-  if(renm) paste("exiftool.exe successfully downloaded to", dir)
+  
+  file.rename(file.path(dir, fldr, "exiftool(-k).exe"), 
+              file.path(dir, fldr, "exiftool.exe"))
+  file.rename(file.path(dir, fldr), 
+              file.path(dir, "exiftool"))
+  message("exiftool.exe successfully downloaded to ", finalpath)
 }
 
 #peep.exif#
