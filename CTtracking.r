@@ -151,7 +151,7 @@ read.exif <- function(path,
   dflong <- read.table(text=txtout[i], stringsAsFactors = FALSE, sep="\t")
   if(nfiles==1) dflong$rowid <- 1 else
     dflong$rowid <- rep(1:(sum(!i)-2), head(diff(which(!i))-1, -1))
-  dfout <- as.data.frame(tidyr::pivot_wider(dflong, rowid, names_from=V1, values_from=V2))[,-1, drop=FALSE]
+  dfout <- as.data.frame(tidyr::pivot_wider(dflong, id_cols=rowid, names_from=V1, values_from=V2))[,-1, drop=FALSE]
   
   if(!"" %in% fields){
     notfound <- fields[!fields %in% names(dfout)]
