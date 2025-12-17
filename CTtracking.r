@@ -261,6 +261,77 @@ image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TR
   }
 }
 
+#' change_timestamps
+#' 
+#' Change file timestamps (DateTimeOriginal) using a dataframe of file paths
+#' and new timestamps.
+#' 
+#'INPUT
+#' data: a dataFrame with (at least) columns:
+#'  SourceFile: full paths of files to change
+#'  DateTimeOriginal: new timestamps to inject
+#' toolpath: a character string giving the path of the folder containing exiftool.exe
+#'  
+#'OUTPUT
+#' None - side effect changes DateTimeOriginal field of file exif data
+#' USE WITH CARE!
+#' 
+#'DETAILS
+#' By default (toolpath=NULL), the function expects to find the exiftool.exe 
+#' file in a folder named exiftool within the current R library, where the
+#' install.exiftool function places it.
+#' 
+#' NOTE: CANNOT BE UNDONE! USE WITH CARE!
+change_timestamps <- function(data, toolpath=NULL){
+  wd <- getwd()
+  if(is.null(toolpath)) toolpath <- file.path(.libPaths(), "exiftool")
+  dirs <- unique(dirname(data$SourceFile))
+  mfile <- file.path(wd, "metadata.csv")
+  dfile <- file.path(wd, "dirs.txt")
+  write.csv(data, mfile, row.names=FALSE)
+  write.table(dirs, dfile, row.names=FALSE, col.names = FALSE, quote=FALSE)
+  cmd <- paste0("exiftool -csv=", paste0("\"", mfile, "\""),
+                " -@ ", paste0("\"", dfile, "\""),
+                " -overwrite_original")
+  setwd(toolpath)
+  shell(cmd)
+  setwd(wd)
+  file.remove(mfile)
+  file.remove(dfile)
+}
+
+
+#' change_timestamps_path
+#' 
+#' Change file timestamps (DateTimeOriginal) of all files in a directory
+#' by a constant offset. Recursively accesses any subdirectories.
+#' 
+#'INPUT
+#' path: path to the directory containing images to change
+#' offset: numeric seconds or lubridate differences by which to change timestamps
+#' toolpath: a character string giving the path of the folder containing exiftool.exe
+#' 
+#'OUTPUT
+#' None - side effect changes DateTimeOriginal field of file exif data
+#'  
+#'DETAILS
+#' By default (toolpath=NULL), the function expects to find the exiftool.exe 
+#' file in a folder named exiftool within the current R library, where the
+#' install.exiftool function places it.
+#' 
+#' Example lubridate time difference offset arguments:
+#' years(5); months(2); hours(12); years(1) + hours(12); months(3) - hours(6)
+#' 
+#' NOTE: CANNOT BE UNDONE! USE WITH CARE!
+change_timestamps_path <- function(path, offset, toolpath=NULL){
+  dir <- normalizePath(path, "/")
+  data <- read.exif(dir, c("Directory", "FileName", "DateTimeOriginal")) %>%
+    mutate(SourceFile = file.path(Directory, FileName),
+           DateTimeOriginal = as.character(ymd_hms(DateTimeOriginal) + offset)) %>%
+    select(-Directory, -FileName)
+  change_timestamp(data, toolpath)
+}
+
 
 #DATA PREP FUNCTIONS#############################################
 
