@@ -263,8 +263,7 @@ image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TR
 
 #' change_timestamps
 #' 
-#' Change file timestamps (DateTimeOriginal) using a dataframe of file paths
-#' and new timestamps.
+#' Change file timestamps using a dataframe of file paths and new timestamps.
 #' 
 #'INPUT
 #' data: a dataFrame with (at least) columns:
@@ -273,8 +272,9 @@ image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TR
 #' toolpath: a character string giving the path of the folder containing exiftool.exe
 #'  
 #'OUTPUT
-#' None - side effect changes DateTimeOriginal field of file exif data
-#' USE WITH CARE!
+#' If any files named in data$SourceFile cannot be found, a data.frame flagging
+#' which files were found and modified, otherwise no output. Side effect changes 
+#' the DateTimeOriginal field of file exif data for all files found.
 #' 
 #'DETAILS
 #' By default (toolpath=NULL), the function expects to find the exiftool.exe 
@@ -282,29 +282,60 @@ image.copy <- function(to, from=NULL, exifdat=NULL, criterion=TRUE, structure=TR
 #' install.exiftool function places it.
 #' 
 #' NOTE: CANNOT BE UNDONE! USE WITH CARE!
+#' 
+#'EXAMPLE
+#library(lubridate)
+#library(dplyr)
+#dir <- "./SurveyImages"
+#dat <- read.exif(dir, c("Directory", "FileName", "DateTimeOriginal")) %>%
+#  mutate(SourceFile = file.path(Directory, FileName),
+#         DateTimeOriginal = ymd_hms(DateTimeOriginal))
+#subdirs <- basename(dat$Directory)
+## Add 10 years to folder1, take 12 hours from folder2, otherwise change nothing
+#offsets <- case_when(subdirs == "folder1" ~ years(10),
+#                     subdirs == "folder2" ~ hours(-12),
+#                     .default = hours(0))
+#dat <- mutate(dat, DateTimeOriginal = DateTimeOriginal + offsets)
+#change_timestamps(dat)
+#read.exif(dir, "DateTimeOriginal") # check
 change_timestamps <- function(data, toolpath=NULL){
-  wd <- getwd()
-  if(is.null(toolpath)) toolpath <- file.path(.libPaths(), "exiftool")
-  dirs <- unique(dirname(data$SourceFile))
-  mfile <- file.path(wd, "metadata.csv")
-  dfile <- file.path(wd, "dirs.txt")
-  write.csv(data, mfile, row.names=FALSE)
-  write.table(dirs, dfile, row.names=FALSE, col.names = FALSE, quote=FALSE)
-  cmd <- paste0("exiftool -csv=", paste0("\"", mfile, "\""),
-                " -@ ", paste0("\"", dfile, "\""),
-                " -overwrite_original")
-  setwd(toolpath)
-  shell(cmd)
-  setwd(wd)
-  file.remove(mfile)
-  file.remove(dfile)
+  rqdFields <- c("SourceFile", "DateTimeOriginal")
+  if(!all(rqdFields %in% names(data))) 
+    stop("data must contain (at least) fields: SourceFile and DateTimeOriginal")
+  
+  fileExists <- file.exists(data$SourceFile)
+  if(all(!fileExists)){
+    stop("Can't find any of the files named in data$SourceFile")
+  } else{
+    wd <- getwd()
+    if(is.null(toolpath)) toolpath <- file.path(.libPaths(), "exiftool")
+    data$SourceFile <- normalizePath(data$SourceFile, .Platform$file.sep)
+    dirs <- unique(dirname(data$SourceFile))
+    mfile <- file.path(wd, "metadata.csv")
+    dfile <- file.path(wd, "dirs.txt")
+    write.csv(data, mfile, row.names=FALSE)
+    write.table(dirs, dfile, row.names=FALSE, col.names = FALSE, quote=FALSE)
+    cmd <- paste0("exiftool -csv=", paste0("\"", mfile, "\""),
+                  " -@ ", paste0("\"", dfile, "\""),
+                  " -overwrite_original")
+    setwd(toolpath)
+    shell(cmd)
+    setwd(wd)
+    file.remove(mfile)
+    file.remove(dfile)
+    
+    noFiles <- sum(!fileExists)
+    message(paste0(noFiles, " file", if(noFiles!=1) "s", " not found"))
+    if(noFiles > 0)
+      return(data.frame(SourceFile = data$SourceFile, FileFound = fileExists))
+  }
 }
 
 
-#' change_timestamps_path
+#' offset_timestamps
 #' 
-#' Change file timestamps (DateTimeOriginal) of all files in a directory
-#' by a constant offset. Recursively accesses any subdirectories.
+#' Offsets timestamps of all files in a directory and its sub-directories 
+#' by a fixed amount. 
 #' 
 #'INPUT
 #' path: path to the directory containing images to change
@@ -320,16 +351,21 @@ change_timestamps <- function(data, toolpath=NULL){
 #' install.exiftool function places it.
 #' 
 #' Example lubridate time difference offset arguments:
-#' years(5); months(2); hours(12); years(1) + hours(12); months(3) - hours(6)
+#' years(5); months(-2); hours(12); years(1) + hours(12); months(3) - hours(6)
 #' 
 #' NOTE: CANNOT BE UNDONE! USE WITH CARE!
-change_timestamps_path <- function(path, offset, toolpath=NULL){
+#' 
+#'EXAMPLE
+#library(lubridate)
+#change_timestamps_path(dir, years(2) + hours(12))
+#read.exif(dir, "DateTimeOriginal") # check
+offset_timestamps <- function(path, offset, toolpath=NULL){
   dir <- normalizePath(path, "/")
   data <- read.exif(dir, c("Directory", "FileName", "DateTimeOriginal")) %>%
     mutate(SourceFile = file.path(Directory, FileName),
            DateTimeOriginal = as.character(ymd_hms(DateTimeOriginal) + offset)) %>%
     select(-Directory, -FileName)
-  change_timestamp(data, toolpath)
+  change_timestamps(data, toolpath)
 }
 
 
